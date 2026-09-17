@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "The Pink Plug",
+    "slug": "the-pink-plug",
+    "scheme": "pinkplug",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./src/imports/Splash2.jpg",
+      "resizeMode": "cover",
+      "backgroundColor": "#11114A"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The Pink Plug needs access to your photos so you can upload a profile photo.",
+          "cameraPermission": "The Pink Plug needs camera access so you can take a selfie for your profile."
+        }
+      ],
+      "expo-image",
+      "expo-status-bar"
+    ],
+    "ios": {
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "The Pink Plug needs access to your photos so you can upload a profile photo.",
+        "NSCameraUsageDescription": "The Pink Plug needs camera access so you can take a selfie for your profile."
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d65a7047-e0ce-4a6a-a0d0-ccac063ea7bd"
+      }
+    }
+  }
+}

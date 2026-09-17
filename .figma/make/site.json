@@ -1,0 +1,10 @@
+{
+  "description": "Discover and connect within a safe queer community through personalized navigation, event management, and resource access for enhanced social engagement.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

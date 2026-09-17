@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	:root { color-scheme: light; }
+	:root.dark { color-scheme: dark; }
+
+	html,
+	body,
+	#root {
+		min-height: 100%;
+		background: #F4F1FF;
+	}
+
+	:root.dark body,
+	:root.dark #root {
+		background: #0A0712;
+	}
+
+	body,
+	div,
+	nav,
+	header,
+	input,
+	button {
+		@apply transition-colors duration-300 ease-in-out;
+	}
+
+	*,
+	*::before,
+	*::after {
+		transition-property: color, background-color, border-color, fill, stroke;
+	}
+
+	:root.dark [class*='r-backgroundColor-'] {
+		background-color: #161224 !important;
+	}
+
+	:root.dark .theme-dismiss-layer {
+		background-color: transparent !important;
+	}
+
+	:root.dark [class*='r-color-'] {
+		color: #F8FAFC !important;
+	}
+
+	:root.dark [class*='r-border'][class*='r-borderColor-']:not([class*='circle-love-share']) {
+		border-color: #334155 !important;
+	}
+
+	:root.dark input::placeholder {
+		color: #94A3B8 !important;
+	}
+
+	:root.dark .circle-love-rsvp {
+		background-color: #E63CD8 !important;
+		border-color: #E63CD8 !important;
+	}
+
+	:root.dark [class*='circle-love-share'] {
+		background-color: transparent !important;
+		border: 1px solid #E63CD8 !important;
+		border-color: #E63CD8 !important;
+	}
+
+	:root.dark .circle-love-share div,
+	:root.dark .circle-love-share span,
+	:root.dark .circle-love-share svg {
+		color: #E63CD8 !important;
+	}
+}
+
