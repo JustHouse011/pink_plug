@@ -1,0 +1,40 @@
+import type { DirectoryResource } from '@/types';
+
+export const DIRECTORY_CATEGORIES = [
+  'All', 'Doctors', 'Therapists', 'Hospitals', 'Clinics', 'Pharmacies',
+  'Mental health', 'Legal aid', 'Support groups', 'Community centres',
+  'LGBTQ+ organisations', 'HIV/STI services', 'Family services', 'Shelters',
+  'Financial services', 'Fitness & wellness', 'Hair & beauty', 'Restaurants & cafes',
+  'Nightlife', 'Arts & culture', 'Retail', 'Travel & transport',
+] as const;
+
+export const DIRECTORY_RESOURCES: DirectoryResource[] = [
+  { id: 'd-1', name: 'Dr. Ayanda Maseko', category: 'Doctors', city: 'Johannesburg', area: 'Rosebank', description: 'Affirming GP offering primary care, PrEP consultations and referrals.', detail: 'Mon-Fri - Bookings required', badge: 'Verified clinician' },
+  { id: 'd-2', name: 'Dr. Kabelo Radebe', category: 'Doctors', city: 'Pretoria', area: 'Hatfield', description: 'LGBTQ+ friendly family doctor with inclusive sexual health services.', detail: 'Mon-Sat - Telehealth available', badge: 'Community verified' },
+  { id: 'd-3', name: 'Ubuntu Gender Health Clinic', category: 'Clinics', city: 'Johannesburg', area: 'Hillbrow', description: 'Low-cost primary care, gender-affirming referrals and wellness support.', detail: 'Walk-ins welcome - 08:00-17:00', badge: 'Queer-led clinic' },
+  { id: 'd-4', name: 'Pink Cross Community Clinic', category: 'Clinics', city: 'Cape Town', area: 'Woodstock', description: 'Inclusive healthcare, STI screening and confidential counselling.', detail: 'Mon-Fri - Sliding scale', badge: 'Community verified' },
+  { id: 'd-5', name: 'Charlotte Maxeke Johannesburg Hospital', category: 'Hospitals', city: 'Johannesburg', area: 'Parktown', description: 'Public hospital with emergency care, specialist referrals and HIV services.', detail: 'Open 24 hours - Emergency department', badge: 'Public service' },
+  { id: 'd-6', name: 'Groote Schuur Hospital Rainbow Desk', category: 'Hospitals', city: 'Cape Town', area: 'Observatory', description: 'Hospital referral desk with a trained LGBTQ+ patient support team.', detail: 'Mon-Fri - Referral required', badge: 'Community verified' },
+  { id: 'd-7', name: 'Mosaic Wellness Pharmacy', category: 'Pharmacies', city: 'Johannesburg', area: 'Melville', description: 'Discreet pharmacy with PrEP, STI treatment support and home delivery.', detail: 'Daily - Delivery available', badge: 'Friendly service' },
+  { id: 'd-8', name: 'Harbour Health Pharmacy', category: 'Pharmacies', city: 'Cape Town', area: 'De Waterkant', description: 'Queer-friendly pharmacists and confidential medication collection.', detail: 'Daily - 08:00-20:00', badge: 'Community verified' },
+  { id: 'd-9', name: 'Thando Nkomo Psychology', category: 'Therapists', city: 'Johannesburg', area: 'Braamfontein', description: 'Affirming individual, couples and family therapy for queer clients.', detail: 'Online and in-person - Bookings', badge: 'Verified therapist' },
+  { id: 'd-10', name: 'Maya Pillay Counselling', category: 'Mental health', city: 'Durban', area: 'Morningside', description: 'Trauma-informed counselling and support for identity, grief and relationships.', detail: 'Online sessions - Sliding scale', badge: 'Community verified' },
+  { id: 'd-11', name: 'Sisonke Mental Health Hub', category: 'Mental health', city: 'Cape Town', area: 'Salt River', description: 'Peer support circles, crisis referrals and low-cost mental health care.', detail: 'Groups weekly - Registration required', badge: 'Queer-led service' },
+  { id: 'd-12', name: 'Imbokodo Legal Collective', category: 'Legal aid', city: 'Johannesburg', area: 'Marshalltown', description: 'Free legal information on discrimination, housing, work and family rights.', detail: 'Consultations Tue-Thu - Bookings', badge: 'Pro bono support' },
+  { id: 'd-13', name: 'Triangle Rights Desk', category: 'Legal aid', city: 'Cape Town', area: 'Gardens', description: 'Legal referrals and documentation support for LGBTQ+ communities.', detail: 'Mon-Fri - Confidential', badge: 'Community verified' },
+  { id: 'd-14', name: 'Thembalethu Support Circle', category: 'Support groups', city: 'Johannesburg', area: 'Soweto', description: 'Peer-led support group for queer youth, families and allies.', detail: 'Every second Saturday - Free', badge: 'Peer-led' },
+  { id: 'd-15', name: 'Pride Parents Network', category: 'Family services', city: 'Pretoria', area: 'Arcadia', description: 'Parent groups, family mediation and affirming guidance for loved ones.', detail: 'Monthly meetups - Online support', badge: 'Community verified' },
+  { id: 'd-16', name: 'The Village Community Centre', category: 'Community centres', city: 'Johannesburg', area: 'Yeoville', description: 'Safe daytime space for referrals, workshops, food parcels and connection.', detail: 'Mon-Sat - 09:00-18:00', badge: 'Queer-led space' },
+  { id: 'd-17', name: 'Safe Haven House', category: 'Shelters', city: 'Cape Town', area: 'Observatory', description: 'Short-term emergency accommodation and safety planning referrals.', detail: '24-hour intake line - Capacity varies', badge: 'Verified resource' },
+  { id: 'd-18', name: 'Thrive HIV and STI Centre', category: 'HIV/STI services', city: 'Johannesburg', area: 'Berea', description: 'Free testing, treatment referrals, PrEP navigation and health education.', detail: 'Walk-ins welcome - Confidential', badge: 'Free services' },
+  { id: 'd-19', name: 'Siyakhula HIV Care', category: 'HIV/STI services', city: 'Durban', area: 'Berea', description: 'Youth-friendly sexual health services and adherence support.', detail: 'Mon-Fri - Free testing', badge: 'Community verified' },
+  { id: 'd-20', name: 'Rainbow Finance Co-op', category: 'Financial services', city: 'Johannesburg', area: 'Braamfontein', description: 'Financial coaching, savings circles and startup support for queer founders.', detail: 'Appointments - Online available', badge: 'Community verified' },
+  { id: 'd-21', name: 'Body Positive Studio', category: 'Fitness & wellness', city: 'Cape Town', area: 'Sea Point', description: 'Inclusive movement classes, yoga and body-neutral wellness coaching.', detail: 'Daily classes - All levels', badge: 'Queer-friendly' },
+  { id: 'd-22', name: 'Kulture Hair House', category: 'Hair & beauty', city: 'Johannesburg', area: 'Newtown', description: 'Gender-affirming cuts, protective styles, colour and beauty services.', detail: 'Tue-Sun - Bookings recommended', badge: 'Queer-led business' },
+  { id: 'd-23', name: 'The Fig Tree Cafe', category: 'Restaurants & cafes', city: 'Pretoria', area: 'Menlo Park', description: 'All-day cafe with community tables, accessible seating and good coffee.', detail: 'Daily - 07:00-21:00', badge: 'Queer-friendly' },
+  { id: 'd-24', name: 'House of Kiki', category: 'Nightlife', city: 'Johannesburg', area: 'Braamfontein', description: 'Inclusive dance floor, drag nights and sober-friendly social events.', detail: 'Fri-Sun - 18+ after 20:00', badge: 'Community favourite' },
+  { id: 'd-25', name: 'Pride Art Exchange', category: 'Arts & culture', city: 'Cape Town', area: 'District Six', description: 'Gallery, workshops and a marketplace for LGBTQ+ artists and makers.', detail: 'Wed-Sun - Free entry', badge: 'Queer-led space' },
+  { id: 'd-26', name: 'Out and About Travel Desk', category: 'Travel & transport', city: 'Johannesburg', area: 'Sandton', description: 'Inclusive travel planning, airport transfers and safe accommodation referrals.', detail: 'Mon-Fri - By appointment', badge: 'Community verified' },
+  { id: 'd-27', name: 'Open Door Bookshop', category: 'Retail', city: 'Durban', area: 'Glenwood', description: 'Independent bookshop with queer literature, gifts and community events.', detail: 'Daily - 09:00-18:00', badge: 'Queer-friendly' },
+  { id: 'd-28', name: 'Ubuntu Pride Network', category: 'LGBTQ+ organisations', city: 'Johannesburg', area: 'Braamfontein', description: 'Community organisation connecting people to advocacy, events, referrals and support.', detail: 'Mon-Fri - Referral desk available', badge: 'Community verified' },
+];

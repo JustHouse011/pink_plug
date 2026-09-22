@@ -1,6 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
+import { radius } from '@/constants/radius';
+import { spacing } from '@/constants/spacing';
+import { typography } from '@/constants/typography';
+import GlassCard from './GlassCard';
 import { useTheme } from '@/context/ThemeProvider';
 
 interface NotificationBarProps {
@@ -18,23 +22,23 @@ export default function NotificationBar({
 }: NotificationBarProps) {
   const { isDark } = useTheme();
   return (
-    <View style={styles.wrapper}>
+    <GlassCard level="hero" edge="glow" style={styles.wrapper}>
       <View style={styles.iconWrap}>
         <Ionicons name="notifications-outline" size={18} color={isDark ? colors.primary : '#fff'} />
       </View>
 
       <View style={styles.textWrap}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        <Text style={[styles.title, { color: isDark ? darkColors.textPrimary : colors.textPrimary }]}>{title}</Text>
+        <Text style={[styles.subtitle, { color: isDark ? darkColors.textSecondary : colors.textSecondary }]}>{subtitle}</Text>
       </View>
 
       <Pressable
         onPress={onPress}
-        style={[styles.button, isDark && styles.buttonDark]}
+        style={styles.button}
       >
         <Text style={styles.buttonText}>{ctaLabel}</Text>
       </Pressable>
-    </View>
+    </GlassCard>
   );
 }
 
@@ -42,15 +46,12 @@ const styles = StyleSheet.create({
   wrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#231A37',
-    borderRadius: 18,
-    padding: 14,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   iconWrap: {
     width: 32,
@@ -64,27 +65,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.cardTitle.fontSize,
+    lineHeight: typography.cardTitle.lineHeight,
+    fontWeight: typography.cardTitle.fontWeight,
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 11,
+    color: colors.textSecondary,
+    fontSize: typography.caption.fontSize,
+    lineHeight: typography.caption.lineHeight,
     marginTop: 3,
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  buttonDark: {
-    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: typography.caption.fontSize,
+    lineHeight: typography.caption.lineHeight,
+    fontWeight: typography.caption.fontWeight,
   },
 });

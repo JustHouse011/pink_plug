@@ -1,16 +1,13 @@
 {
   "expo": {
     "name": "The Pink Plug",
+    "owner": "bongz011",
     "slug": "the-pink-plug",
     "scheme": "pinkplug",
+    "icon": "./src/imports/Fingerprint New_Icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./src/imports/Splash2.jpg",
-      "resizeMode": "cover",
-      "backgroundColor": "#11114A"
-    },
     "plugins": [
       "expo-router",
       "expo-font",
@@ -22,7 +19,15 @@
         }
       ],
       "expo-image",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./src/imports/Splash2.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#FBF8F4"
+        }
+      ]
     ],
     "ios": {
       "infoPlist": {
@@ -38,6 +43,21 @@
       "eas": {
         "projectId": "d65a7047-e0ce-4a6a-a0d0-ccac063ea7bd"
       }
+    },
+    "android": {
+      "package": "com.bongz011.thepinkplug",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d65a7047-e0ce-4a6a-a0d0-ccac063ea7bd",
+      "enabled": true,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

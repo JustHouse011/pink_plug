@@ -1,29 +1,34 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
-  Platform,
+  Modal,
   Pressable,
-  SafeAreaView,
+  Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTabScreenLayout } from '@/layout/tabLayout';
 import { useRouter } from 'expo-router';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { MOCK_PLACES } from '@/data/mockData';
-import Card from '@/components/ui/Card';
+import GlassCard from '@/components/ui/GlassCard';
 import Button from '@/components/ui/Button';
 import Chip from '@/components/ui/Chip';
 import RouteMap from '@/components/route/RouteMap';
-import AnimatedCard from '@/components/motion/AnimatedCard';
-import AnimatedList from '@/components/motion/AnimatedList';
+import MapControlButton from '@/components/route/MapControlButton';
+import PlaceMapSheet from '@/components/route/PlaceMapSheet';
 import { useTheme } from '@/context/ThemeProvider';
 import { useAppStore } from '@/store/useAppStore';
+import { useEmergencyContactsStore } from '@/store/useEmergencyContactsStore';
 import type { Place } from '@/types';
+import { placeRoute } from '@/navigation/routes';
+import { getRouteMetrics, getRoutePoints } from '@/components/route/routeGeometry';
+import { shareContent } from '@/services/sharing';
 
 const categoryOptions = ['All', 'stay', 'eat', 'drink', 'party', 'shop', 'culture', 'wellness', 'services'] as const;
 const categoryLabels: Record<string, string> = {
@@ -44,19 +49,60 @@ const verificationLabels: Record<string, string> = {
   community_verified: 'Community verified',
 };
 
+const routeCurrentLocation = { latitude: -26.1952, longitude: 28.0341 };
+
+type SharePayload = {
+  title: string;
+  message: string;
+  url?: string;
+};
+
+const getDistanceFromCurrentLocation = (place: Place) => {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(place.coords.latitude - routeCurrentLocation.latitude);
+  const dLng = toRadians(place.coords.longitude - routeCurrentLocation.longitude);
+  const lat1 = toRadians(routeCurrentLocation.latitude);
+  const lat2 = toRadians(place.coords.latitude);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 export default function Route() {
+  const tabLayout = useTabScreenLayout();
   const router = useRouter();
+  const hasHydrated = useAppStore((state) => state.hasHydrated);
   const waypoints = useAppStore((state) => state.waypoints);
   const add = useAppStore((state) => state.addWaypoint);
   const remove = useAppStore((state) => state.removeWaypoint);
   const mode = useAppStore((state) => state.transitMode);
   const setMode = useAppStore((state) => state.setTransitMode);
-  const { isDark, toggleTheme } = useTheme();
+  const contacts = useEmergencyContactsStore((state) => state.contacts);
+  const { isDark } = useTheme();
   const [checkedInPlace, setCheckedInPlace] = useState<Place | null>(null);
   const [checkedInAt, setCheckedInAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [routeStartedAt, setRouteStartedAt] = useState<number | null>(null);
   const [routeElapsedSeconds, setRouteElapsedSeconds] = useState(0);
+  const [showDeparturePrompt, setShowDeparturePrompt] = useState(false);
+  const [addRouteModalVisible, setAddRouteModalVisible] = useState(false);
+  const [addRouteQuery, setAddRouteQuery] = useState('');
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const initialWaypointIds = useRef<Set<string> | null>(null);
+  const [waypointBaselineReady, setWaypointBaselineReady] = useState(false);
+
+  useEffect(() => {
+    if (!hasHydrated || waypointBaselineReady) return;
+
+    initialWaypointIds.current = new Set(waypoints.map((waypoint) => waypoint.id));
+    setWaypointBaselineReady(true);
+  }, [hasHydrated, waypointBaselineReady, waypoints]);
   const routeDurationMinutes = 12;
 
   const getLocationShareMessage = (place: Place) => {
@@ -68,30 +114,7 @@ export default function Route() {
   const handleSharePlace = async (place: Place) => {
     const message = getLocationShareMessage(place);
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${place.coords.latitude},${place.coords.longitude}`;
-
-    try {
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
-        await navigator.share({
-          title: place.name,
-          text: message,
-          url: mapsUrl,
-        });
-        return;
-      }
-
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(`${message}\n${mapsUrl}`);
-        Alert.alert('Location copied', 'The safe-route pin is ready to paste anywhere.');
-        return;
-      }
-
-      await Share.share({
-        title: place.name,
-        message: `${message}\n${mapsUrl}`,
-      });
-    } catch {
-      Alert.alert('Share cancelled');
-    }
+    openShareModal({ title: place.name, message, url: mapsUrl });
   };
 
   const handleCheckIn = (place: Place) => {
@@ -100,6 +123,112 @@ export default function Route() {
     setElapsedSeconds(0);
     setSelectedPlaceId(place.id);
     Alert.alert('Checked in', `Your mock location pin is set to ${place.name}.`);
+  };
+
+  const openShareModal = (payload: SharePayload) => {
+    const smsContacts = contacts.filter((contact) => contact.canReceiveSms);
+
+    if (smsContacts.length === 0) {
+      Alert.alert('No SMS contacts', 'Add a trusted contact who can receive SMS before sharing your trip.');
+      return;
+    }
+
+    setSharePayload(payload);
+    setSelectedContactIds(smsContacts.map((contact) => contact.id));
+    setShareModalVisible(true);
+  };
+
+  const sendToSelectedContacts = async () => {
+    if (!sharePayload) return;
+
+    const recipients = contacts.filter(
+      (contact) => selectedContactIds.includes(contact.id) && contact.canReceiveSms,
+    );
+
+    if (recipients.length === 0) {
+      Alert.alert('Choose a contact', 'Select at least one trusted contact to continue.');
+      return;
+    }
+
+    const message = sharePayload.url
+      ? `${sharePayload.message}\n${sharePayload.url}`
+      : sharePayload.message;
+    const separator = Platform.OS === 'ios' ? ',' : ';';
+    const smsUrl = `sms:${recipients.map((contact) => contact.phone).join(separator)}?body=${encodeURIComponent(message)}`;
+
+    try {
+      if (Platform.OS !== 'web' && await Linking.canOpenURL(smsUrl)) {
+        await Linking.openURL(smsUrl);
+      } else {
+        await shareContent(sharePayload);
+      }
+    } catch {
+      await shareContent(sharePayload);
+    }
+
+    setShareModalVisible(false);
+    setSharePayload(null);
+  };
+
+  const getRouteSummaryMessage = () => {
+    const startLabel = waypoints[0]?.place?.name ?? 'My current location';
+    const destinationLabel = selectedPlace?.name ?? waypoints[waypoints.length - 1]?.place?.name ?? 'my destination';
+    const stopList = waypoints.length > 0
+      ? waypoints.map((item) => item.place.name).join(', ')
+      : 'No saved stops yet';
+
+    return `I’m sharing my Pink Route. Start: ${startLabel}. Destination: ${destinationLabel}. Stops: ${stopList}.`;
+  };
+
+  const handleSaveLocation = () => {
+    const target = selectedPlace ?? waypoints[waypoints.length - 1]?.place ?? null;
+
+    if (!target) {
+      Alert.alert('No destination selected', 'Choose a place from the map or search results first.');
+      return;
+    }
+
+    if (waypoints.some((item) => item.place.id === target.id)) {
+      Alert.alert('Already saved', `${target.name} is already in your route.`);
+      return;
+    }
+
+    add(target);
+    setSaved((current) => (current.includes(target.id) ? current : [...current, target.id]));
+    Alert.alert('Location saved', `${target.name} was added to your Pink Route.`);
+  };
+
+  const handleAddDestination = () => {
+    setAddRouteQuery('');
+    setAddRouteModalVisible(true);
+  };
+
+  const openAddRouteModal = (place?: Place) => {
+    setAddRouteQuery(place?.name ?? '');
+    setAddRouteModalVisible(true);
+  };
+
+  const addPlaceToRoute = (place: Place) => {
+    if (waypoints.some((item) => item.place.id === place.id)) {
+      Alert.alert('Already on route', `${place.name} is already in your saved route.`);
+      return;
+    }
+
+    add(place);
+    setSelectedPlaceId(place.id);
+    setAddRouteModalVisible(false);
+    setAddRouteQuery('');
+    Alert.alert('Destination added', `${place.name} was added to your route.`);
+  };
+
+  const handleShareRoute = async () => {
+    if (!selectedPlace && waypoints.length === 0) {
+      Alert.alert('No route selected', 'Choose a destination or add a place to your route before sharing.');
+      return;
+    }
+
+    const message = getRouteSummaryMessage();
+    openShareModal({ title: 'Pink Route', message });
   };
 
   useEffect(() => {
@@ -137,9 +266,28 @@ export default function Route() {
     : 0;
 
   const startRoute = () => {
+    const destination = selectedPlace ?? waypoints[waypoints.length - 1]?.place;
+    if (!destination) return;
+    setQuery('');
+    setCategory('All');
+    setNearMe(true);
     setRouteStartedAt(Date.now());
+    setRouteElapsedSeconds(1);
+    setLeavingNow(true);
+    setDepartureTime(null);
+    setShowDeparturePrompt(false);
+    Alert.alert('Route started', `You are now in transit to ${destination.name}.`);
+  };
+
+  const endTrip = () => {
+    setRouteStartedAt(null);
     setRouteElapsedSeconds(0);
-    Alert.alert('Route started', 'You are now in transit to The Pink Plug • Braamfontein.');
+    setLeavingNow(false);
+    setDepartureTime(null);
+    setShowDeparturePrompt(false);
+    setSelectedPlaceId(null);
+    setSheetState('partial');
+    Alert.alert('Trip ended', 'Your live Pink Route has been ended.');
   };
 
   const [query, setQuery] = useState('');
@@ -147,22 +295,50 @@ export default function Route() {
   const [nearMe, setNearMe] = useState(true);
   const [saved, setSaved] = useState<string[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [leavingNow, setLeavingNow] = useState(false);
+  const [departureTime, setDepartureTime] = useState<string | null>(null);
+  const [sheetState, setSheetState] = useState<'collapsed' | 'partial' | 'expanded'>('partial');
+
+  const handleSelectPlace = (place: Place) => {
+    setSelectedPlaceId(place.id);
+    setLeavingNow(false);
+    setDepartureTime(null);
+  };
+
+  const dataPlaces = useMemo(() =>
+    MOCK_PLACES.filter((place) => Number.isFinite(place.coords?.latitude) && Number.isFinite(place.coords?.longitude)),
+    [],
+  );
+
+  const handleScheduleDeparture = () => {
+    Alert.alert('Set departure time', `When would you like to leave for ${selectedPlace?.name ?? 'your destination'}?`, [
+      { text: 'In 15 minutes', onPress: () => setDepartureTime('In 15 minutes') },
+      { text: 'In 30 minutes', onPress: () => setDepartureTime('In 30 minutes') },
+      { text: 'In 1 hour', onPress: () => setDepartureTime('In 1 hour') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const filteredPlaces = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return MOCK_PLACES.filter((place) => {
-      const matchesCity = place.city === 'Johannesburg';
-      const matchesCategory = category === 'All' || place.category === category;
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        place.name.toLowerCase().includes(normalizedQuery) ||
-        place.address.toLowerCase().includes(normalizedQuery);
-      const matchesNearby = !nearMe || Number.parseFloat(place.distance) <= 1.1;
+    return [...dataPlaces]
+      .filter((place) => {
+        const matchesCategory = category === 'All' || place.category === category;
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          place.name.toLowerCase().includes(normalizedQuery) ||
+          place.address.toLowerCase().includes(normalizedQuery) ||
+          place.description.toLowerCase().includes(normalizedQuery) ||
+          place.city.toLowerCase().includes(normalizedQuery) ||
+          place.category.toLowerCase().includes(normalizedQuery);
 
-      return matchesCity && matchesCategory && matchesQuery && matchesNearby;
-    });
-  }, [category, nearMe, query]);
+        const matchesNearby = !nearMe || getDistanceFromCurrentLocation(place) <= 3.5;
+
+        return matchesCategory && matchesQuery && matchesNearby;
+      })
+      .sort((a, b) => getDistanceFromCurrentLocation(a) - getDistanceFromCurrentLocation(b));
+  }, [category, dataPlaces, nearMe, query]);
 
   const toggleSaved = (id: string) => {
     setSaved((current) =>
@@ -170,28 +346,176 @@ export default function Route() {
     );
   };
 
-  const visibleMarkers = filteredPlaces.filter((place) => place.city === 'Johannesburg').slice(0, 5);
-  const selectedPlace = visibleMarkers.find((place) => place.id === selectedPlaceId) ?? null;
+  const visibleMarkers = filteredPlaces;
+  const selectedPlace = dataPlaces.find((place) => place.id === selectedPlaceId) ?? null;
+  const hasRouteDestination = waypointBaselineReady
+    && waypoints.some((waypoint) => !initialWaypointIds.current?.has(waypoint.id));
+
+  const destinationCandidates = query.trim().length > 0 ? filteredPlaces.slice(0, 5) : [];
+  const addRouteCandidates = useMemo(() => {
+    const normalizedQuery = addRouteQuery.trim().toLowerCase();
+
+    return MOCK_PLACES.filter((place) => {
+      if (!normalizedQuery) return true;
+
+      return [place.name, place.address, place.city, place.category]
+        .some((value) => value.toLowerCase().includes(normalizedQuery));
+    }).slice(0, 8);
+  }, [addRouteQuery]);
+  const routeMetrics = useMemo(
+    () => getRouteMetrics(mode, getRoutePoints(waypoints, visibleMarkers)),
+    [mode, visibleMarkers, waypoints],
+  );
 
   return (
-    <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, isDark && styles.darkText]}>Pink Route Map</Text>
-        <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Interactive map of queer-friendly spaces near you.</Text>
-
+    <SafeAreaView edges={tabLayout.edges} style={[styles.safe, isDark && styles.safeDark]}>
+      <View style={styles.screen}>
         <RouteMap
           places={visibleMarkers}
+          routePlaces={waypoints.map((waypoint) => waypoint.place)}
           selectedPlace={selectedPlace}
           dark={isDark}
-          onDarkChange={toggleTheme}
-          onSelectPlace={(place) => setSelectedPlaceId(place.id)}
+          onSelectPlace={handleSelectPlace}
           onClosePlace={() => setSelectedPlaceId(null)}
-          onOpenPlace={(place) => router.push(`/places/${place.id}` as never)}
-          onAddPlace={add}
+          onOpenPlace={(place) => router.push(placeRoute(place.id))}
+          onAddPlace={addPlaceToRoute}
           onSharePlace={handleSharePlace}
           onCheckIn={handleCheckIn}
           routeProgress={routeProgress}
+          showRouteHud={Boolean(routeStartedAt)}
         />
+
+        <View style={styles.hudTop} pointerEvents="box-none">
+          <GlassCard style={[styles.discoveryBar, isDark && styles.discoveryBarDark]}>
+            <View style={[styles.discoverySearchRow, isDark && styles.discoverySearchRowDark]}>
+              <Text style={styles.discoverySearchIcon}>⌕</Text>
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Where do you want to go?"
+                placeholderTextColor={isDark ? darkColors.muted : colors.muted}
+                style={[styles.discoverySearch, isDark && styles.darkText]}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Toggle nearby places"
+                onPress={() => setNearMe((current) => !current)}
+                style={[styles.nearbyButton, isDark && styles.nearbyButtonDark, nearMe && styles.nearbyButtonActive]}
+              >
+                <Text style={[styles.nearbyButtonText, isDark && styles.nearbyButtonTextDark]}>{nearMe ? 'Nearby' : 'All'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}
+              style={styles.filterScroll}
+            >
+              {categoryOptions.map((option) => (
+                <View key={option} style={styles.filterChipWrap}>
+                  <Chip label={categoryLabels[option]} active={category === option} onPress={() => setCategory(option)} />
+                </View>
+              ))}
+            </ScrollView>
+
+            {destinationCandidates.length > 0 && (
+              <View style={styles.searchResults}>
+                {destinationCandidates.map((place) => (
+                  <Pressable
+                    key={place.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Choose ${place.name} as destination`}
+                    onPress={() => {
+                      handleSelectPlace(place);
+                      setQuery(place.name);
+                    }}
+                    style={styles.searchResult}
+                  >
+                    <View style={styles.searchResultIcon}><Text style={styles.searchResultIconText}>●</Text></View>
+                    <View style={styles.searchResultInfo}>
+                      <Text style={[styles.searchResultName, isDark && styles.darkText]}>{place.name}</Text>
+                      <Text style={[styles.searchResultMeta, isDark && styles.darkSecondaryText]}>{place.category} • {place.distance} • {place.safetyScore}% safe</Text>
+                    </View>
+                    <Text style={styles.searchResultArrow}>›</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </GlassCard>
+
+          <View style={styles.topControls}>
+            <MapControlButton label="⌕" onPress={() => setQuery('')} isDark={isDark} />
+            <MapControlButton label="＋" onPress={handleAddDestination} isDark={isDark} accent />
+            <MapControlButton label="◎" onPress={handleShareRoute} isDark={isDark} />
+          </View>
+
+          {routeStartedAt && (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add another stop to the route"
+                onPress={handleAddDestination}
+                style={[
+                  styles.addStopPill,
+                  isDark && styles.addStopPillDark,
+                  (query.trim().length > 0 || destinationCandidates.length > 0) && styles.addStopPillExpanded,
+                ]}
+              >
+                <Text style={[styles.addStopText, isDark && styles.addStopTextDark]}>Add stop</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="End trip"
+                onPress={endTrip}
+                style={[styles.endTripPill, isDark && styles.endTripPillDark]}
+              >
+                <Text style={[styles.endTripText, isDark && styles.endTripTextDark]}>End trip</Text>
+              </Pressable>
+            </>
+          )}
+
+          {hasRouteDestination && !routeStartedAt && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start route"
+              onPress={() => setShowDeparturePrompt(true)}
+              style={[styles.startRoutePill, isDark && styles.startRoutePillDark]}
+            >
+              <Text style={[styles.startRouteText, isDark && styles.startRouteTextDark]}>Start route</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {showDeparturePrompt && !routeStartedAt && (
+          <GlassCard style={[styles.departurePrompt, isDark && styles.departurePromptDark]}>
+            <View style={styles.departurePromptText}>
+              <Text style={[styles.departureTitle, isDark && styles.darkText]}>Are you leaving now?</Text>
+              <Text style={[styles.departureSubtitle, isDark && styles.darkSecondaryText]}>
+                {departureTime ? `Departure scheduled ${departureTime.toLowerCase()}.` : 'Start a live mock trip to your route destination.'}
+              </Text>
+            </View>
+            <View style={styles.departureActions}>
+              <Button label={departureTime ? 'Change time' : 'Not yet'} onPress={handleScheduleDeparture} style={styles.departureButton} />
+              <Button label="Yes, start" variant="success" onPress={startRoute} style={styles.departureButton} />
+            </View>
+          </GlassCard>
+        )}
+
+        {selectedPlace && (
+          <PlaceMapSheet
+            place={selectedPlace}
+            isDark={isDark}
+            sheetState={sheetState}
+            onStateChange={setSheetState}
+            onClose={() => setSelectedPlaceId(null)}
+            onAddRoute={() => addPlaceToRoute(selectedPlace)}
+            onOpenDetails={() => router.push(placeRoute(selectedPlace.id))}
+            onShare={() => handleSharePlace(selectedPlace)}
+            onCheckIn={() => handleCheckIn(selectedPlace)}
+          />
+        )}
 
         {checkedInPlace && (
           <View style={[styles.checkInCard, isDark && styles.checkInCardDark]}>
@@ -201,202 +525,306 @@ export default function Route() {
               <Text style={[styles.checkInSubtitle, isDark && styles.darkSecondaryText]}>Mock location pin active</Text>
             </View>
             <Text style={styles.checkInTimer}>{formatElapsed(elapsedSeconds)}</Text>
+            <Pressable onPress={() => openShareModal({ title: 'Pink Route check-in', message: `I’m checked in at ${checkedInPlace.name}.\n${checkedInPlace.address}` })}>
+              <Text style={styles.shareCheckIn}>Share</Text>
+            </Pressable>
             <Pressable onPress={() => { setCheckedInPlace(null); setCheckedInAt(null); setElapsedSeconds(0); }}>
               <Text style={styles.endCheckIn}>End</Text>
             </Pressable>
           </View>
         )}
+      </View>
 
-        <AnimatedCard spring>
-          <View style={[styles.bottomSheetCard, isDark && styles.bottomSheetCardDark]}>
-          {routeStartedAt && (
-            <View style={[styles.transitBanner, isDark && styles.transitBannerDark]}>
-              <View style={styles.transitDot} />
-              <View style={styles.transitInfo}>
-                <Text style={[styles.transitTitle, isDark && styles.darkText]}>In transit</Text>
-                <Text style={[styles.transitSubtitle, isDark && styles.darkSecondaryText]}>Heading to The Pink Plug • Braamfontein</Text>
+      <Modal
+        visible={addRouteModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAddRouteModalVisible(false)}
+      >
+        <View style={styles.addRouteOverlay}>
+          <View style={[styles.addRouteModal, isDark && styles.addRouteModalDark]}>
+            <View style={styles.addRouteHeader}>
+              <View>
+                <Text style={[styles.addRouteTitle, isDark && styles.darkText]}>Add to route</Text>
+                <Text style={[styles.addRouteSubtitle, isDark && styles.darkSecondaryText]}>Search for a safe place or town.</Text>
               </View>
-              <Text style={styles.transitTime}>{routeMinutesRemaining} min left</Text>
-              <Pressable onPress={() => setRouteStartedAt(null)}>
-                <Text style={styles.endTransit}>End</Text>
+              <Pressable onPress={() => setAddRouteModalVisible(false)} accessibilityLabel="Close add to route">
+                <Text style={styles.addRouteClose}>Close</Text>
               </Pressable>
             </View>
-          )}
-          <View style={styles.bottomSheetHandle} />
-          <View style={styles.bottomSheetHeader}>
-            <View>
-              <Text style={[styles.bottomSheetEyebrow, isDark && styles.darkSecondaryText]}>Pink Route</Text>
-              <Text style={[styles.bottomSheetTitle, isDark && styles.darkText]}>Johannesburg queer-safe loop</Text>
-            </View>
-            <Text style={styles.bottomSheetBadge}>{routeStartedAt ? `${routeMinutesRemaining} min left` : '12 min'}</Text>
-          </View>
 
-          <View style={styles.routeSummaryList}>
-            <View style={styles.routeStepRow}>
-              <Text style={styles.routeStepDot} />
-              <View style={styles.routeStepInfo}>
-                <Text style={[styles.routeStepLabel, isDark && styles.darkSecondaryText]}>From</Text>
-                <Text style={[styles.routeStepText, isDark && styles.darkText]}>Maboneng Precinct</Text>
-              </View>
-              <Text style={styles.routeStepTime}>2 min</Text>
-            </View>
-
-            <View style={styles.routeStepRow}>
-              <Text style={styles.routeStepDotMiddle} />
-              <View style={styles.routeStepInfo}>
-                <Text style={[styles.routeStepLabel, isDark && styles.darkSecondaryText]}>Via</Text>
-                <Text style={[styles.routeStepText, isDark && styles.darkText]}>Braamfontein safe corridor</Text>
-              </View>
-              <Text style={styles.routeStepTime}>7 min</Text>
-            </View>
-
-            <View style={styles.routeStepRow}>
-              <Text style={styles.routeStepDotEnd} />
-              <View style={styles.routeStepInfo}>
-                <Text style={[styles.routeStepLabel, isDark && styles.darkSecondaryText]}>To</Text>
-                <Text style={[styles.routeStepText, isDark && styles.darkText]}>The Pink Plug • Braamfontein</Text>
-              </View>
-              <Text style={styles.routeStepTime}>3 min</Text>
-            </View>
-          </View>
-
-          <Text style={[styles.bottomSheetMeta, isDark && styles.darkSecondaryText]}>Starts near Maboneng • ends at Braamfontein • 1.1 km</Text>
-          <View style={styles.bottomSheetActions}>
-            <Button label={routeStartedAt ? 'Route in progress' : 'Start route'} variant="primary" onPress={startRoute} disabled={routeStartedAt !== null} />
-            <Button label="Save plan" variant="secondary" onPress={() => {}} />
-          </View>
-          </View>
-        </AnimatedCard>
-
-        <Text style={[styles.label, isDark && styles.darkText]}>Travel mode</Text>
-        <View style={styles.modes}>
-          {(['walking', 'driving', 'transit'] as const).map((item) => (
-            <Chip key={item} label={item} active={mode === item} onPress={() => setMode(item)} />
-          ))}
-        </View>
-
-        <Text style={[styles.label, isDark && styles.darkText]}>Search</Text>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search spaces, addresses, neighbourhoods"
-          placeholderTextColor={colors.muted}
-          style={[styles.search, isDark && styles.searchDark]}
-        />
-
-        <Text style={[styles.label, isDark && styles.darkText]}>Explore by type</Text>
-        <View style={styles.categoryRow}>
-          {categoryOptions.map((option) => (
-            <Chip
-              key={option}
-              label={categoryLabels[option]}
-              active={category === option}
-              onPress={() => setCategory(option)}
+            <TextInput
+              autoFocus
+              value={addRouteQuery}
+              onChangeText={setAddRouteQuery}
+              placeholder="Enter a location or town"
+              placeholderTextColor={colors.muted}
+              style={[styles.addRouteInput, isDark && styles.addRouteInputDark]}
             />
-          ))}
-        </View>
 
-        <Text style={[styles.label, isDark && styles.darkText]}>Saved stops ({waypoints.length})</Text>
-        <AnimatedList>
-          {waypoints.length === 0 ? (
-            <Card>
-              <Text style={[styles.empty, isDark && styles.darkSecondaryText]}>Add trusted spaces to build your safe route.</Text>
-            </Card>
-          ) : (
-            waypoints.map((item, index) => (
-              <Card key={item.id} style={styles.stopRow}>
-                <Text style={styles.stopNumber}>{index + 1}</Text>
-                <View style={styles.stopInfo}>
-                  <Text style={styles.stopName}>{item.place.name}</Text>
-                  <Text style={styles.stopMeta}>{item.place.category} · {item.place.distance}</Text>
-                </View>
-                <Button label="Remove" variant="secondary" onPress={() => remove(item.id)} />
-              </Card>
-            ))
-          )}
-        </AnimatedList>
-
-        <Text style={[styles.label, isDark && styles.darkText]}>Queer-friendly spaces</Text>
-        <AnimatedList>
-        {filteredPlaces.map((place) => {
-          const isSaved = saved.includes(place.id);
-          const isWaypoint = waypoints.some((item) => item.place.id === place.id);
-          const badgeLabels = place.verifications.map((verification) => verificationLabels[verification]);
-
-          return (
-            <AnimatedCard key={place.id}>
-            <Card style={styles.placeCard}>
-              <View style={styles.placeHeader}>
-                <View style={styles.placeInfo}>
-                  <Text style={[styles.placeName, isDark && styles.darkText]}>{place.name}</Text>
-                  <Text style={[styles.placeMeta, isDark && styles.darkSecondaryText]}>{place.address}</Text>
-                  <Text style={[styles.placeMeta, isDark && styles.darkSecondaryText]}>★ {place.rating} · {place.reviewCount} reviews · {place.distance}</Text>
-                </View>
+            <ScrollView style={styles.addRouteResults} keyboardShouldPersistTaps="handled">
+              {addRouteCandidates.map((place) => (
                 <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={isSaved ? 'Remove saved place' : 'Save place'}
-                  onPress={() => toggleSaved(place.id)}
-                  style={styles.saveButton}
+                  key={place.id}
+                  style={[styles.addRouteResult, isDark && styles.addRouteResultDark]}
+                  onPress={() => addPlaceToRoute(place)}
                 >
-                  <Text style={styles.saveIcon}>{isSaved ? '♥' : '♡'}</Text>
+                  <View style={styles.addRouteResultIcon}><Text style={styles.addRouteResultIconText}>+</Text></View>
+                  <View style={styles.addRouteResultInfo}>
+                    <Text style={[styles.addRouteResultName, isDark && styles.darkText]}>{place.name}</Text>
+                    <Text style={[styles.addRouteResultMeta, isDark && styles.darkSecondaryText]}>{place.city} · {place.category} · {place.distance}</Text>
+                  </View>
+                  <Text style={styles.addRouteResultArrow}>›</Text>
                 </Pressable>
-              </View>
+              ))}
+              {addRouteCandidates.length === 0 && (
+                <Text style={[styles.addRouteEmpty, isDark && styles.darkSecondaryText]}>No places found. Try another location or town.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
-              <View style={styles.badgeRow}>
-                {badgeLabels.map((label) => (
-                  <Text key={label} style={styles.badge}>
-                    {label}
-                  </Text>
-                ))}
-                <Text style={styles.safetyBadge}>🛡️ {place.safetyScore}%</Text>
+      <Modal
+        visible={shareModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={styles.shareOverlay}>
+          <View style={[styles.shareModal, isDark && styles.shareModalDark]}>
+            <View style={styles.addRouteHeader}>
+              <View>
+                <Text style={[styles.addRouteTitle, isDark && styles.darkText]}>Share with contacts</Text>
+                <Text style={[styles.addRouteSubtitle, isDark && styles.darkSecondaryText]}>Choose who should receive this update.</Text>
               </View>
+              <Pressable onPress={() => setShareModalVisible(false)} accessibilityLabel="Close share contacts">
+                <Text style={styles.addRouteClose}>Close</Text>
+              </Pressable>
+            </View>
 
-              <View style={styles.placeActions}>
-                <Button
-                  label={isWaypoint ? 'Added' : 'Add to route'}
-                  variant="secondary"
-                  onPress={() => add(place)}
-                />
-                <Button
-                  label="Open"
-                  variant="secondary"
-                  onPress={() => router.push(`/places/${place.id}` as never)}
-                />
-              </View>
-            </Card>
-            </AnimatedCard>
-          );
-        })}
-        </AnimatedList>
-      </ScrollView>
+            <ScrollView style={styles.shareContactList}>
+              {contacts.filter((contact) => contact.canReceiveSms).map((contact) => {
+                const selected = selectedContactIds.includes(contact.id);
+
+                return (
+                  <Pressable
+                    key={contact.id}
+                    onPress={() => setSelectedContactIds((current) => selected
+                      ? current.filter((id) => id !== contact.id)
+                      : [...current, contact.id])}
+                    style={[styles.shareContactRow, isDark && styles.shareContactRowDark, selected && styles.shareContactRowSelected]}
+                  >
+                    <View style={[styles.shareContactCheck, selected && styles.shareContactCheckSelected]}>
+                      <Text style={styles.shareContactCheckText}>{selected ? '✓' : ''}</Text>
+                    </View>
+                    <View style={styles.shareContactInfo}>
+                      <Text style={[styles.shareContactName, isDark && styles.darkText]}>{contact.name}</Text>
+                      <Text style={[styles.shareContactMeta, isDark && styles.darkSecondaryText]}>{contact.relationship}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Button label="Open message" variant="success" onPress={sendToSelectedContacts} />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' },
+  screen: { flex: 1, position: 'relative', overflow: 'hidden', paddingTop: 0, paddingBottom: 0 },
+  hudTop: { position: 'absolute', top: 8, left: 12, right: 12, zIndex: 20 },
+  topControls: { position: 'absolute', top: 8, right: 12, gap: 10, zIndex: 22 },
+  addStopPill: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    top: 146,
+    zIndex: 21,
+    alignSelf: 'center',
+    backgroundColor: '#FFF5FB',
+    borderWidth: 1,
+    borderColor: 'rgba(194, 46, 145, 0.45)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    shadowColor: '#7A4D7C',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  addStopPillExpanded: {
+    top: 182,
+  },
+  addStopPillDark: { backgroundColor: 'rgba(230, 60, 216, 0.2)', borderColor: 'rgba(230, 60, 216, 0.45)' },
+  addStopText: { color: '#5C1B4B', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  addStopTextDark: { color: '#FCE7FF' },
+  endTripPill: {
+    position: 'absolute',
+    right: 12,
+    top: 146,
+    zIndex: 21,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(208, 27, 73, 0.38)',
+    shadowColor: '#7A4D7C',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  endTripPillDark: { backgroundColor: 'rgba(58, 18, 36, 0.82)', borderColor: 'rgba(255, 120, 160, 0.38)' },
+  endTripText: { color: '#A11B3D', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  endTripTextDark: { color: '#FFD7E3' },
+  startRoutePill: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    top: 146,
+    zIndex: 21,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#E63CD8',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: '#7A4D7C',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  startRoutePillDark: { backgroundColor: '#A92BA0' },
+  startRouteText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  startRouteTextDark: { color: '#FFFFFF' },
+  filterScroll: { marginTop: 10 },
+  filterRow: { paddingRight: 12, gap: 8, alignItems: 'center' },
+  filterChipWrap: { marginRight: 0 },
+  routeMetricsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 8 },
+  metricTitle: { fontSize: 14, fontWeight: '700' },
+  metricDivider: { fontSize: 14, fontWeight: '700' },
+  metricValue: { fontSize: 12, fontWeight: '600' },
   checkInCard: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18, padding: 14, borderRadius: 16, backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   checkInCardDark: { backgroundColor: '#132A24', borderColor: '#176B50' },
   checkInDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E' },
   checkInInfo: { flex: 1 },
-  checkInTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  checkInTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '500' },
   checkInSubtitle: { color: colors.textSecondary, fontSize: 11, marginTop: 3 },
-  checkInTimer: { color: '#16A34A', fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  endCheckIn: { color: colors.danger, fontSize: 12, fontWeight: '700' },
+  checkInTimer: { color: '#16A34A', fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  endCheckIn: { color: colors.danger, fontSize: 12, fontWeight: '500' },
+  shareCheckIn: { color: '#0A8A4F', fontSize: 12, fontWeight: '600' },
   transitBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, padding: 12, borderRadius: 14, backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   transitBannerDark: { backgroundColor: '#132A24', borderColor: '#176B50' },
   transitDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E' },
   transitInfo: { flex: 1 },
-  transitTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  transitTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '500' },
   transitSubtitle: { color: colors.textSecondary, fontSize: 11, marginTop: 3 },
-  transitTime: { color: '#16A34A', fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  endTransit: { color: colors.danger, fontSize: 12, fontWeight: '700' },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
+  transitTime: { color: '#16A34A', fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  endTransit: { color: colors.danger, fontSize: 12, fontWeight: '500' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   content: { width: '100%', maxWidth: 620, alignSelf: 'center', padding: 20, paddingBottom: 120 },
-  title: { color: colors.textPrimary, fontSize: 29, fontWeight: '600' },
+  title: { color: colors.textPrimary, fontSize: 29, fontWeight: '500' },
   subtitle: { color: colors.textSecondary, fontSize: 14, marginTop: 4, marginBottom: 18 },
+  discoveryBar: { marginBottom: 14, padding: 12, borderRadius: 22 },
+  discoveryBarDark: { borderColor: darkColors.border },
+  discoverySearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.58)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)' },
+  discoverySearchRowDark: { minHeight: 50, backgroundColor: darkColors.surface, borderColor: darkColors.border },
+  discoverySearchIcon: { color: colors.primary, fontSize: 24, lineHeight: 24 },
+  discoverySearch: { flex: 1, minWidth: 0, paddingVertical: 8, color: colors.textPrimary, fontSize: 13 },
+  nearbyButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: 'rgba(255,255,255,0.72)' },
+  nearbyButtonDark: { backgroundColor: darkColors.softSurface, borderWidth: 1, borderColor: darkColors.border },
+  nearbyButtonActive: { backgroundColor: 'rgba(0,200,83,0.14)' },
+  nearbyButtonText: { color: '#168A4A', fontSize: 10, fontWeight: '600' },
+  nearbyButtonTextDark: { color: darkColors.textSecondary },
+  searchResults: { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(122,92,244,0.12)' },
+  searchResult: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  searchResultIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,200,83,0.14)' },
+  searchResultIconText: { color: '#00C853', fontSize: 12 },
+  searchResultInfo: { flex: 1 },
+  searchResultName: { color: colors.textPrimary, fontSize: 12, fontWeight: '600' },
+  searchResultMeta: { color: colors.textSecondary, fontSize: 10, marginTop: 3, textTransform: 'capitalize' },
+  searchResultArrow: { color: colors.primary, fontSize: 22 },
+  routePlanner: { marginBottom: 14, padding: 14, borderRadius: 22 },
+  routePlannerDark: { borderColor: darkColors.border },
+  routePlannerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  routePlannerText: { flex: 1 },
+  routePlannerLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '400' },
+  routePlannerValue: { color: colors.textPrimary, fontSize: 13, fontWeight: '400', marginTop: 2 },
+  routePlannerConnector: { width: 1, height: 12, marginLeft: 5, marginVertical: 2, backgroundColor: colors.border },
+  originDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#00C853', borderWidth: 3, borderColor: '#DDF8E9' },
+  destinationDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: colors.primary, borderWidth: 3, borderColor: '#F7D8F4' },
+  transportPills: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  departurePrompt: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, padding: 14, borderRadius: 20 },
+  departurePromptDark: { borderColor: darkColors.border },
+  departurePromptText: { flex: 1 },
+  departureTitle: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  departureSubtitle: { color: colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  departureActions: { flexDirection: 'row', gap: 7 },
+  departureButton: { minHeight: 38, paddingHorizontal: 10 },
+  trackingHeader: { marginBottom: 14, padding: 16, borderRadius: 22 },
+  trackingHeaderDark: { borderColor: darkColors.border },
+  trackingHeaderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  trackingEyebrow: { color: colors.primary, fontSize: 10, fontWeight: '500', letterSpacing: 1 },
+  trackingTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '500', marginTop: 4 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: 'rgba(0, 200, 83, 0.12)' },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#00C853' },
+  liveBadgeText: { color: '#0B8F45', fontSize: 10, fontWeight: '500' },
+  trackingMetrics: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+  trackingMetric: { flex: 1 },
+  trackingMetricValue: { color: colors.textPrimary, fontSize: 16, fontWeight: '500' },
+  trackingMetricLabel: { color: colors.textSecondary, fontSize: 10, marginTop: 3 },
+  trackingMetricDivider: { width: 1, height: 28, backgroundColor: colors.border, marginHorizontal: 12 },
+  quickActions: { marginBottom: 18, padding: 14, borderRadius: 20 },
+  quickActionsDark: { borderColor: darkColors.border },
+  quickActionsTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '600', marginBottom: 10 },
+  quickActionsRow: { flexDirection: 'row', gap: 8 },
+  quickAction: { flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(236, 72, 153, 0.08)', borderWidth: 1, borderColor: 'rgba(236, 72, 153, 0.16)' },
+  quickActionIcon: { color: colors.primary, fontSize: 20, lineHeight: 22 },
+  quickActionText: { color: colors.textPrimary, fontSize: 10, fontWeight: '500', marginTop: 4, textAlign: 'center' },
+  addRouteOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(18, 12, 25, 0.42)' },
+  addRouteModal: { maxHeight: '78%', padding: 20, borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: '#FFFFFF' },
+  addRouteModalDark: { backgroundColor: darkColors.softSurface },
+  addRouteHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 16 },
+  addRouteTitle: { color: colors.textPrimary, fontSize: 21, fontWeight: '600' },
+  addRouteSubtitle: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
+  addRouteClose: { color: colors.primary, fontSize: 12, fontWeight: '600', paddingTop: 4 },
+  addRouteInput: { minHeight: 48, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FAF7FF', color: colors.textPrimary, fontSize: 14 },
+  addRouteInputDark: { borderColor: darkColors.border, backgroundColor: darkColors.input, color: darkColors.textPrimary },
+  addRouteResults: { marginTop: 12 },
+  addRouteResult: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(122,92,244,0.1)' },
+  addRouteResultDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
+  addRouteResultIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(236,72,153,0.12)' },
+  addRouteResultIconText: { color: colors.primary, fontSize: 20, fontWeight: '400' },
+  addRouteResultInfo: { flex: 1 },
+  addRouteResultName: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
+  addRouteResultMeta: { color: colors.textSecondary, fontSize: 11, marginTop: 3, textTransform: 'capitalize' },
+  addRouteResultArrow: { color: colors.primary, fontSize: 24 },
+  addRouteEmpty: { color: colors.textSecondary, paddingVertical: 24, textAlign: 'center', fontSize: 13 },
+  shareOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(18, 12, 25, 0.42)' },
+  shareModal: { maxHeight: '78%', padding: 20, borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: '#FFFFFF' },
+  shareModalDark: { backgroundColor: darkColors.softSurface },
+  shareContactList: { marginBottom: 16 },
+  shareContactRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(122,92,244,0.1)' },
+  shareContactRowDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
+  shareContactRowSelected: { backgroundColor: 'rgba(236,72,153,0.08)' },
+  shareContactCheck: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  shareContactCheckSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  shareContactCheckText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  shareContactInfo: { flex: 1 },
+  shareContactName: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
+  shareContactMeta: { color: colors.textSecondary, fontSize: 11, marginTop: 3 },
   mapPanel: { borderRadius: 28, padding: 18, marginBottom: 20, borderWidth: 1, borderColor: '#DCE8F2' },
   mapPanelDark: { borderColor: '#324B63' },
   mapHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
@@ -690,7 +1118,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  bottomSheetCardDark: { backgroundColor: '#161224', borderColor: '#334155' },
+  bottomSheetCardDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border },
   bottomSheetHandle: {
     width: 42,
     height: 4,
@@ -726,9 +1154,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 14,
   },
-  searchDark: { backgroundColor: '#161224', borderColor: '#334155', color: '#F8FAFC' },
+  searchDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border, color: darkColors.textPrimary },
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  stopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  stopRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, padding: 16 },
   stopNumber: {
     width: 30,
     height: 30,
@@ -739,9 +1167,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingTop: 5,
   },
-  stopInfo: { flex: 1 },
-  stopName: { color: colors.textPrimary, fontWeight: '600' },
-  stopMeta: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  stopInfo: { flex: 1, minWidth: 0 },
+  stopName: { color: colors.textPrimary, fontWeight: '600', fontSize: 14 },
+  stopMeta: { color: colors.textSecondary, fontSize: 11, marginTop: 3 },
   empty: { color: colors.muted, textAlign: 'center', paddingVertical: 8 },
   placeCard: { marginBottom: 12 },
   placeHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
@@ -771,4 +1199,3 @@ const styles = StyleSheet.create({
   },
   placeActions: { flexDirection: 'row', gap: 10 },
 });
-

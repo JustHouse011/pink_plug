@@ -2,20 +2,21 @@ import { useState } from 'react';
 import {
   Alert,
   Image,
-  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
 import { typography } from '@/constants/typography';
 import { useTheme } from '@/context/ThemeProvider';
+import { shareContent } from '@/services/sharing';
 
 export type CircleOfLoveLayout = 'horizontal' | 'vertical' | 'hero';
 
@@ -72,6 +73,7 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
   const [errors, setErrors] = useState<Partial<Record<keyof RsvpForm, string>>>({});
 
   const isHero = layout === 'hero';
+  const isIOSHero = Platform.OS === 'ios' && isHero;
   const isVertical = layout === 'vertical';
 
   const validateForm = () => {
@@ -113,20 +115,15 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
     }, 800);
   };
 
-  const openShareLink = async (channel: 'whatsapp' | 'x' | 'facebook' | 'linkedin') => {
-    const url = 'https://thepinkplug.app/circle-of-love';
-    const urls = {
-      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${shareMessage} ${url}`)}`,
-      x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}&url=${encodeURIComponent(url)}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(shareMessage)}`,
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
-    };
+  const openShareLink = async (_channel: 'whatsapp' | 'x' | 'facebook' | 'linkedin') => {
+    const didShare = await shareContent({
+      title: 'Circle of Love',
+      message: shareMessage,
+      url: 'https://thepinkplug.app/circle-of-love',
+    });
 
-    try {
-      await Linking.openURL(urls[channel]);
+    if (didShare) {
       setShareVisible(false);
-    } catch {
-      Alert.alert('Unable to open share link', 'Please try again in a moment.');
     }
   };
 
@@ -137,27 +134,28 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
   };
 
   const handleNativeShare = async () => {
-    try {
-      await Share.share({
-        message: `${shareMessage} https://thepinkplug.app/circle-of-love`,
-        title: 'Circle of Love',
-      });
+    const didShare = await shareContent({
+      title: 'Circle of Love',
+      message: shareMessage,
+      url: 'https://thepinkplug.app/circle-of-love',
+    });
+
+    if (didShare) {
       setShareVisible(false);
-    } catch {
-      Alert.alert('Share cancelled');
     }
   };
 
   return (
     <>
-      <View
+      <GlassCard
         style={[
           styles.card,
-          isDark && styles.cardDark,
           isHero ? styles.heroCard : isVertical ? styles.verticalCard : styles.horizontalCard,
         ]}
+        level="hero"
+        gradientBorder="emphasized"
       >
-        <View style={isVertical || isHero ? styles.imageWrapStacked : styles.imageWrapRow}>
+        <View style={[isVertical || isHero ? styles.imageWrapStacked : styles.imageWrapRow, isIOSHero && styles.heroImageIOS]}>
           <Image
             source={campaign.image}
             resizeMode="cover"
@@ -169,7 +167,7 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
           </View>
         </View>
 
-        <View style={[styles.contentWrap, isDark && styles.contentWrapDark]}>
+        <View style={[styles.contentWrap, isDark && styles.contentWrapDark, isIOSHero && styles.heroContentIOS]}>
           <View style={styles.tagRow}>
             {campaign.tags.map((tag) => (
               <View key={tag} style={[styles.tagPill, isDark && styles.tagPillDark]}>
@@ -191,11 +189,11 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
           <View style={styles.metaBlock}>
             <View style={styles.metaRow}>
               <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-              <Text style={[styles.metaText, isDark && styles.darkSecondaryText]}>{campaign.date}</Text>
+              <Text style={[styles.metaText, isDark && styles.darkSecondaryText, isIOSHero && styles.shrinkIOS]}>{campaign.date}</Text>
             </View>
             <View style={styles.metaRow}>
               <Ionicons name="location-outline" size={14} color={colors.primary} />
-              <Text style={[styles.metaText, isDark && styles.darkSecondaryText]}>{campaign.location}</Text>
+              <Text style={[styles.metaText, isDark && styles.darkSecondaryText, isIOSHero && styles.shrinkIOS]}>{campaign.location}</Text>
             </View>
           </View>
 
@@ -208,19 +206,19 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
             ))}
           </View>
 
-          <View style={styles.actionsRow}>
-            <Pressable className="circle-love-rsvp" style={styles.primaryAction} onPress={() => setRsvpVisible(true)}>
+          <View style={[styles.actionsRow, isIOSHero && styles.actionsRowIOS]}>
+            <Pressable className="circle-love-rsvp" style={[styles.primaryAction, isIOSHero && styles.actionIOS]} onPress={() => setRsvpVisible(true)}>
               <Ionicons name="people-outline" size={16} color="#fff" />
-              <Text style={styles.primaryActionText}>RSVP / Register</Text>
+              <Text style={[styles.primaryActionText, isIOSHero && styles.actionTextIOS]}>RSVP / Register</Text>
             </Pressable>
 
-            <Pressable className="circle-love-share" style={styles.secondaryAction} onPress={() => setShareVisible(true)}>
+            <Pressable className="circle-love-share" style={[styles.secondaryAction, isIOSHero && styles.actionIOS]} onPress={handleNativeShare}>
               <Ionicons name="share-social-outline" size={16} color={isDark ? colors.primary : colors.textPrimary} />
-              <Text style={styles.secondaryActionText}>Share Campaign</Text>
+              <Text style={[styles.secondaryActionText, isIOSHero && styles.actionTextIOS]}>Share Campaign</Text>
             </Pressable>
           </View>
         </View>
-      </View>
+      </GlassCard>
 
       <Modal transparent visible={rsvpVisible} animationType="slide" onRequestClose={() => setRsvpVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -383,26 +381,21 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
 const styles = StyleSheet.create({
   card: {
     width: '100%',
+    padding: 0,
     overflow: 'hidden',
-    backgroundColor: '#fff',
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: '#F0E9FF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 5,
   },
-  cardDark: {
-    backgroundColor: '#161224',
-    borderColor: '#334155',
-  },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   heroCard: {
     width: '100%',
   },
+  // The image follows the card's actual inner width; text determines body height.
+  heroImageIOS: { height: undefined, aspectRatio: 3 / 2 },
+  heroContentIOS: { flex: 0, minWidth: 0 },
+  shrinkIOS: { flexShrink: 1 },
+  actionsRowIOS: { flexWrap: 'wrap' },
+  actionIOS: { flexBasis: 140, flexGrow: 1, flexShrink: 1, paddingHorizontal: 8, paddingVertical: 8 },
+  actionTextIOS: { flexShrink: 1, textAlign: 'center' },
   horizontalCard: {
     flexDirection: 'row',
   },
@@ -449,9 +442,9 @@ const styles = StyleSheet.create({
   contentWrap: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
   },
-  contentWrapDark: { backgroundColor: '#161224' },
+  contentWrapDark: { backgroundColor: darkColors.surface },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -465,9 +458,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2EAFF',
   },
   tagPillDark: {
-    backgroundColor: '#231A3D',
+    backgroundColor: darkColors.softSurface,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: darkColors.border,
   },
   tagText: {
     color: colors.primary,
@@ -504,7 +497,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heartButtonDark: { backgroundColor: '#231A3D' },
+  heartButtonDark: { backgroundColor: darkColors.softSurface },
   metaBlock: {
     marginTop: 14,
     gap: 8,
@@ -532,7 +525,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFE5FF',
   },
-  metricCardDark: { backgroundColor: '#231A3D', borderColor: '#3B2B55' },
+  metricCardDark: { backgroundColor: darkColors.softSurface, borderColor: darkColors.border },
   metricLabel: {
     color: colors.textSecondary,
     fontSize: 10,
@@ -574,12 +567,12 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 46,
     borderRadius: 14,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.secondary,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.secondary,
   },
   secondaryActionText: {
-    color: colors.primary,
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: typography.semiBold,
   },
@@ -592,7 +585,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   drawer: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     paddingHorizontal: 18,
@@ -600,7 +593,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     maxHeight: '88%',
   },
-  drawerDark: { backgroundColor: '#161224', borderColor: '#3B2B55', borderWidth: 1 },
+  drawerDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border, borderWidth: 1 },
   shareList: {
     gap: 10,
   },
@@ -615,7 +608,7 @@ const styles = StyleSheet.create({
     borderColor: '#EAE2FF',
     backgroundColor: '#F9F5FF',
   },
-  shareOptionDark: { backgroundColor: '#231A3D', borderColor: '#3B2B55' },
+  shareOptionDark: { backgroundColor: darkColors.softSurface, borderColor: darkColors.border },
   shareOptionText: {
     color: colors.textPrimary,
     fontSize: 14,
@@ -644,14 +637,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E7E2FF',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
   },
   nativeShareButtonText: {
     color: colors.textPrimary,
     fontSize: 13,
     fontWeight: typography.semiBold,
   },
-  nativeShareButtonDark: { backgroundColor: '#231A3D', borderColor: '#3B2B55' },
+  nativeShareButtonDark: { backgroundColor: darkColors.softSurface, borderColor: darkColors.border },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -699,7 +692,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 14,
   },
-  inputDark: { backgroundColor: '#110D1D', borderColor: '#3B2B55', color: '#F8FAFC' },
+  inputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
   textArea: {
     minHeight: 100,
     textAlignVertical: 'top',
@@ -757,7 +750,7 @@ const styles = StyleSheet.create({
   },
   roleSheet: {
     width: '86%',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#EAE2FF',
@@ -770,7 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#F7F2FF',
   },
-  roleOptionDark: { backgroundColor: '#231A3D' },
+  roleOptionDark: { backgroundColor: darkColors.softSurface },
   roleOptionSelected: {
     backgroundColor: '#E7D9FF',
   },

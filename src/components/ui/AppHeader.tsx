@@ -1,16 +1,23 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import { colors } from '@/constants/colors';
-import { MOCK_USER } from '@/data/mockData';
+import { MOCK_USER } from '@/data/mockUser';
 import Avatar from '@/components/ui/Avatar';
 import { useAppStore } from '@/store/useAppStore';
 import { useTheme } from '@/context/ThemeProvider';
+import { glass } from '@/constants/glass';
+import { radius } from '@/constants/radius';
+import { spacing } from '@/constants/spacing';
 
 const hiddenRoutes = ['/', '/login', '/onboarding', '/register', '/index', '/profile-setup'];
 
 export default function AppHeader() {
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const isIOSTab = Platform.OS === 'ios' && /^\/(?:\(tabs\)\/)?(home|explore|community|route|profile)$/.test(pathname);
   const router = useRouter();
   const logout = useAppStore((state) => state.logout);
   const shareLocation = useAppStore((state) => state.shareLocation);
@@ -55,7 +62,14 @@ export default function AppHeader() {
   ];
 
   return (
-    <View style={[styles.container, isDark && styles.containerDark]}>
+    <View style={[styles.container, isDark && styles.containerDark, isIOSTab && { paddingTop: 12 + insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={isDark ? glass.gradientBorder.subtle : glass.gradientBorder.lightEmphasized}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.headerEdge}
+      />
       <View style={styles.topBar}>
         <View style={styles.topBarActions}>
           <Pressable
@@ -135,7 +149,7 @@ export default function AppHeader() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(247, 243, 255, 0.95)',
+    backgroundColor: glass.light.subtle.background,
     paddingTop: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -148,8 +162,15 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   containerDark: {
-    backgroundColor: 'rgba(10, 7, 18, 0.95)',
-    borderBottomColor: 'rgba(196, 181, 253, 0.14)',
+    backgroundColor: glass.dark.subtle.background,
+    borderBottomColor: glass.dark.subtle.border,
+  },
+  headerEdge: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1.5,
   },
   dismissLayer: {
     position: 'absolute',
@@ -163,8 +184,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
   },
   topBarActions: {
     flexDirection: 'row',
@@ -174,29 +195,29 @@ const styles = StyleSheet.create({
   themeButton: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F0E9FF',
+    backgroundColor: glass.light.subtle.background,
     borderWidth: 1,
     borderColor: colors.border,
   },
   themeButtonDark: {
-    backgroundColor: '#231A3D',
-    borderColor: '#3D2F63',
+    backgroundColor: glass.dark.subtle.background,
+    borderColor: glass.dark.subtle.border,
   },
   iconButton: {
     position: 'relative',
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: '#F3EEFF',
+    borderRadius: radius.sm,
+    backgroundColor: glass.light.subtle.background,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(230, 60, 216, 0.12)',
   },
-  iconButtonDark: { backgroundColor: '#231A3D', borderColor: '#3B2B55' },
+  iconButtonDark: { backgroundColor: glass.dark.subtle.background, borderColor: glass.dark.subtle.border },
   notificationBadge: {
     position: 'absolute',
     right: -3,
@@ -247,8 +268,8 @@ const styles = StyleSheet.create({
   avatarButton: {
     width: 42,
     height: 42,
-    borderRadius: 21,
-    backgroundColor: '#fff',
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
     borderWidth: 1,
     borderColor: 'rgba(230, 60, 216, 0.12)',
     overflow: 'hidden',
@@ -263,8 +284,8 @@ const styles = StyleSheet.create({
     right: 0,
     top: 54,
     width: 220,
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: '#F7D4F4',
     paddingVertical: 8,
@@ -276,8 +297,8 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   menuCardDark: {
-    backgroundColor: '#161224',
-    borderColor: '#3B2B55',
+    backgroundColor: glass.dark.standard.background,
+    borderColor: glass.dark.standard.border,
   },
   menuItem: {
     flexDirection: 'row',

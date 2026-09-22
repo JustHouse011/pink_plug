@@ -1,15 +1,19 @@
 ﻿import { useState } from 'react';
-import { FlatList, Linking, Modal, Pressable, SafeAreaView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { FlatList, Modal, Pressable, Text, TextInput, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTabScreenLayout } from '@/layout/tabLayout';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeProvider';
 import { MOCK_POSTS } from '@/data/mockData';
 import type { CommunityPost } from '@/types';
 import Avatar from '@/components/ui/Avatar';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
+import { shareContent } from '@/services/sharing';
 
 export default function Community() {
+  const tabLayout = useTabScreenLayout();
   const { isDark } = useTheme();
   const [posts, setPosts] = useState<CommunityPost[]>(MOCK_POSTS);
   const [liked, setLiked] = useState<string[]>([]);
@@ -21,6 +25,7 @@ export default function Community() {
   const [composeVisible, setComposeVisible] = useState(false);
   const [postDraft, setPostDraft] = useState('');
   const [city, setCity] = useState('Cape Town');
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
 
   const handleComment = (postId: string) => {
     const comment = commentDrafts[postId]?.trim();
@@ -31,11 +36,23 @@ export default function Community() {
     setCommenting(null);
   };
 
-  const handleShare = (postId: string, author: string, content: string) => {
-    setSharePost({ id: postId, author, content });
+  const handleShare = async (postId: string, author: string, content: string) => {
+    const didShare = await shareContent({
+      title: 'Pink Plug community post',
+      message: `${author}: ${content}`,
+      url: 'https://thepinkplug.app/community',
+    });
+
+    if (didShare) {
+      setShared((current) => (current.includes(postId) ? current : [...current, postId]));
+      setShareNotice('Post shared successfully.');
+      return;
+    }
+
+    setShareNotice('Share is unavailable on this device. The post remains in the community feed.');
   };
 
-  const publishPost = () => {
+  const publishPost = async () => {
     const content = postDraft.trim();
     if (!content) return;
 
@@ -56,37 +73,36 @@ export default function Community() {
     setPosts((current) => [newPost, ...current]);
     setPostDraft('');
     setComposeVisible(false);
-    setSharePost({ id: newPost.id, author: newPost.author, content: newPost.content });
+    setShareNotice('Post published locally. Share is available from the post actions.');
   };
 
-  const handleSocialShare = async (channel: 'whatsapp' | 'facebook' | 'x' | 'linkedin') => {
+  const handleSocialShare = async (_channel: 'whatsapp' | 'facebook' | 'x' | 'linkedin') => {
     if (!sharePost) return;
 
-    const message = `${sharePost.author}: ${sharePost.content}`;
-    const encodedMessage = encodeURIComponent(message);
-    const encodedUrl = encodeURIComponent('https://thepinkplug.app/community');
-    const urls = {
-      whatsapp: `https://wa.me/?text=${encodedMessage}%20${encodedUrl}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedMessage}`,
-      x: `https://twitter.com/intent/tweet?text=${encodedMessage}&url=${encodedUrl}`,
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
-    };
+    const didShare = await shareContent({
+      title: 'Pink Plug community post',
+      message: `${sharePost.author}: ${sharePost.content}`,
+      url: 'https://thepinkplug.app/community',
+    });
 
-    try {
-      await Linking.openURL(urls[channel]);
+    if (didShare) {
       setShared((current) => (current.includes(sharePost.id) ? current : [...current, sharePost.id]));
+      setShareNotice('Post shared successfully.');
       setSharePost(null);
-    } catch {
-      // The selected social app may be unavailable on the device.
+      return;
     }
+
+    setShareNotice('Share is unavailable on this device. The post remains in the community feed.');
+    setSharePost(null);
   };
 
   return (
-    <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
+    <SafeAreaView edges={tabLayout.edges} style={[styles.safe, isDark && styles.safeDark]}>
       <FlatList
+        {...tabLayout.scrollProps}
         data={posts}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, tabLayout.contentStyle]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
@@ -115,7 +131,7 @@ export default function Community() {
                 <Avatar value={item.avatar} size={42} />
                 <View style={styles.authorText}>
                   <Text style={[styles.name, isDark && styles.darkText]}>{item.author}</Text>
-                  <Text style={styles.meta}>{item.handle} · {item.timeAgo} · {item.city}</Text>
+                  <Text style={[styles.meta, isDark && styles.darkSecondaryText]}>{item.handle} · {item.timeAgo} · {item.city}</Text>
                 </View>
                 <Ionicons name="ellipsis-horizontal" size={18} color={isDark ? colors.primary : colors.muted} />
               </View>
@@ -177,7 +193,7 @@ export default function Community() {
                     value={commentDrafts[item.id] ?? ''}
                     onChangeText={(value) => setCommentDrafts((current) => ({ ...current, [item.id]: value }))}
                     placeholder="Write a comment..."
-                    placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+                    placeholderTextColor={isDark ? darkColors.muted : colors.muted}
                     style={[styles.commentInput, isDark && styles.commentInputDark]}
                     returnKeyType="send"
                     onSubmitEditing={() => handleComment(item.id)}
@@ -240,7 +256,7 @@ export default function Community() {
               value={postDraft}
               onChangeText={setPostDraft}
               placeholder={`Share something with the ${city} community...`}
-              placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+              placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               style={[styles.postInput, isDark && styles.postInputDark]}
             />
             <Pressable
@@ -258,10 +274,10 @@ export default function Community() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 120 },
   title: { color: colors.textPrimary, fontSize: 29, fontWeight: '600' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 16 },
@@ -297,9 +313,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   commentInputDark: {
-    backgroundColor: '#110D1D',
-    borderColor: '#3B2B55',
-    color: '#F8FAFC',
+    backgroundColor: darkColors.input,
+    borderColor: darkColors.border,
+    color: darkColors.textPrimary,
   },
   commentButton: {
     backgroundColor: colors.primary,
@@ -327,9 +343,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   shareSheetDark: {
-    backgroundColor: '#161224',
+    backgroundColor: darkColors.softSurface,
     borderWidth: 1,
-    borderColor: '#3B2B55',
+    borderColor: darkColors.border,
   },
   shareTitle: {
     color: colors.textPrimary,
@@ -385,9 +401,9 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   composeSheetDark: {
-    backgroundColor: '#161224',
+    backgroundColor: darkColors.softSurface,
     borderWidth: 1,
-    borderColor: '#3B2B55',
+    borderColor: darkColors.border,
   },
   composeHeader: {
     flexDirection: 'row',
@@ -412,9 +428,9 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   postInputDark: {
-    backgroundColor: '#110D1D',
-    borderColor: '#3B2B55',
-    color: '#F8FAFC',
+    backgroundColor: darkColors.input,
+    borderColor: darkColors.border,
+    color: darkColors.textPrimary,
   },
   publishButton: {
     marginTop: 14,

@@ -1,10 +1,12 @@
-﻿import { SafeAreaView, ScrollView, Text, View, StyleSheet } from 'react-native';
+﻿import { ScrollView, Text, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { useTheme } from '@/context/ThemeProvider';
+import { routes as appRoutes } from '@/navigation/routes';
 
 const routes = [
   { id: 'r1', title: 'Cape Town loop', subtitle: 'Long Street → De Waterkant → Green Point', time: '18 min' },
@@ -19,7 +21,7 @@ export default function Travel() {
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>{'‹'} Travel</Text>
+        <Text style={styles.back} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>{'‹'} Travel</Text>
         <Text accessibilityRole="header" style={[styles.title, isDark && styles.darkText]}>Travel & safety</Text>
         <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Plan queer-friendly routes before you head out.</Text>
 
@@ -47,15 +49,15 @@ export default function Travel() {
           <Text style={[styles.tipText, isDark && styles.darkSecondaryText]}>• Use safety scores and community checks when choosing stops.</Text>
         </Card>
 
-        <Button label="Build my route" onPress={() => router.push('/(tabs)/route')} />
+        <Button label="Build my route" onPress={() => router.push(appRoutes.route)} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' }, darkText: { color: '#F8FAFC' }, darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' }, darkText: { color: darkColors.textPrimary }, darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 120 },
   back: { color: colors.primary, fontSize: 18, fontWeight: '600', marginBottom: 8 },
   title: { color: colors.textPrimary, fontSize: 29, fontWeight: '600' },

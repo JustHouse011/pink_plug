@@ -1,10 +1,11 @@
-import { Linking, Pressable, SafeAreaView, ScrollView, Text, View, StyleSheet } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import ReviewSection from '@/components/reviews/ReviewSection';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { MOCK_PLACES } from '@/data/mockData';
 import { useAppStore } from '@/store/useAppStore';
 import { useTheme } from '@/context/ThemeProvider';
@@ -31,7 +32,7 @@ export default function PlaceDetail() {
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
           <Text style={styles.back}>‹  Back</Text>
         </Pressable>
         <Image source={{ uri: place.imageUrl }} style={styles.hero} contentFit="cover" />
@@ -78,8 +79,8 @@ export default function PlaceDetail() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' }, darkText: { color: '#F8FAFC' }, darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' }, darkText: { color: darkColors.textPrimary }, darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 60 },
   back: { color: colors.primary, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   hero: { width: '100%', height: 230, borderRadius: 24 },

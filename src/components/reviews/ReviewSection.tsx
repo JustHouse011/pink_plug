@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
+import { useTheme } from '@/context/ThemeProvider';
 import type { Review } from '@/types';
 
 interface ReviewSectionProps {
@@ -14,6 +16,7 @@ const renderStars = (rating: number) => {
 };
 
 export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps) {
+  const { isDark } = useTheme();
   const [userRating, setUserRating] = useState(5);
   const [headline, setHeadline] = useState('');
   const [comment, setComment] = useState('');
@@ -43,32 +46,32 @@ export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps)
 
   return (
     <View>
-      <Text style={styles.section}>Reviews</Text>
-      <View style={styles.reviewSummary}>
-        <Text style={styles.reviewSummaryValue}>{summary.average.toFixed(1)}</Text>
+      <Text style={[styles.section, isDark && styles.darkPrimary]}>Reviews</Text>
+      <GlassCard level="hero" edge="glow" style={styles.reviewSummary}>
+        <Text style={[styles.reviewSummaryValue, isDark && styles.darkPrimary]}>{summary.average.toFixed(1)}</Text>
         <View style={styles.reviewSummaryMeta}>
           <Text style={styles.reviewSummaryStars}>{renderStars(summary.average)}</Text>
-          <Text style={styles.reviewSummaryText}>{summary.count} community reviews</Text>
+          <Text style={[styles.reviewSummaryText, isDark && styles.darkSecondary]}>{summary.count} community reviews</Text>
         </View>
-      </View>
+      </GlassCard>
 
       {reviews.map((review) => (
-        <View key={review.id} style={styles.reviewCard}>
+        <GlassCard key={review.id} level="standard" edge="subtle" style={styles.reviewCard}>
           <View style={styles.reviewHeader}>
             <Text style={styles.avatar}>{review.avatar}</Text>
             <View style={styles.reviewHeaderText}>
-              <Text style={styles.reviewUser}>{review.user}</Text>
-              <Text style={styles.reviewMeta}>{review.timeAgo}</Text>
+              <Text style={[styles.reviewUser, isDark && styles.darkPrimary]}>{review.user}</Text>
+              <Text style={[styles.reviewMeta, isDark && styles.darkSecondary]}>{review.timeAgo}</Text>
             </View>
             <Text style={styles.reviewRating}>{renderStars(review.rating)}</Text>
           </View>
-          <Text style={styles.reviewHeadline}>{review.headline}</Text>
-          <Text style={styles.reviewComment}>{review.comment}</Text>
-        </View>
+          <Text style={[styles.reviewHeadline, isDark && styles.darkPrimary]}>{review.headline}</Text>
+          <Text style={[styles.reviewComment, isDark && styles.darkSecondary]}>{review.comment}</Text>
+        </GlassCard>
       ))}
 
-      <View style={styles.reviewForm}>
-        <Text style={styles.formTitle}>Write a review</Text>
+      <GlassCard level="hero" edge="glow" style={styles.reviewForm}>
+        <Text style={[styles.formTitle, isDark && styles.darkPrimary]}>Write a review</Text>
         <View style={styles.starSelector}>
           {[1, 2, 3, 4, 5].map((value) => (
             <Pressable
@@ -88,7 +91,7 @@ export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps)
           onChangeText={setHeadline}
           placeholder="Headline (optional)"
           placeholderTextColor={colors.textSecondary}
-          style={styles.input}
+          style={[styles.input, isDark && styles.inputDark]}
         />
 
         <TextInput
@@ -98,13 +101,13 @@ export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps)
           numberOfLines={4}
           placeholder="Share your experience..."
           placeholderTextColor={colors.textSecondary}
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, isDark && styles.inputDark]}
         />
 
         <Pressable onPress={handleSubmit} style={styles.submitButton}>
           <Text style={styles.submitLabel}>Submit review</Text>
         </Pressable>
-      </View>
+      </GlassCard>
     </View>
   );
 }
@@ -117,19 +120,12 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   reviewSummaryValue: { color: colors.textPrimary, fontSize: 24, fontWeight: '600' },
   reviewSummaryMeta: { flex: 1 },
   reviewSummaryStars: { color: colors.warning, fontSize: 14, letterSpacing: 1.5 },
   reviewSummaryText: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
   reviewCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: 14,
     marginTop: 12,
   },
@@ -145,9 +141,6 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 16,
     borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     gap: 12,
   },
   formTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
@@ -170,9 +163,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     color: colors.textPrimary,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.30)',
     fontSize: 14,
   },
+  inputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
+  darkPrimary: { color: darkColors.textPrimary },
+  darkSecondary: { color: darkColors.textSecondary },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   submitButton: {
     minHeight: 48,

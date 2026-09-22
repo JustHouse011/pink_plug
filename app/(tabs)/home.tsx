@@ -3,17 +3,22 @@
 import {
   Alert,
   FlatList,
+  Image,
+  Modal,
+  Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
   View,
   StyleSheet,
+  useWindowDimensions,
 } from "react-native"
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTabScreenLayout } from '@/layout/tabLayout';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from "expo-router"
+import { useRouter, type Href } from "expo-router"
 
 import Avatar from '@/components/ui/Avatar';
 
@@ -25,19 +30,34 @@ import SectionHeader from "@/components/ui/SectionHeader"
 
 import Card from "@/components/ui/Card"
 import NotificationBar from "@/components/ui/NotificationBar"
+import GlassCard from "@/components/ui/GlassCard"
 import CircleOfLoveCard from "@/components/campaign/CircleOfLoveCard"
 import AnimatedCard from "@/components/motion/AnimatedCard"
 import AnimatedList from "@/components/motion/AnimatedList"
 
-import { colors } from "@/constants/colors"
+import { colors, darkColors } from "@/constants/colors"
 
-import { MOCK_EVENTS, MOCK_PLACES, MOCK_USER } from "@/data/mockData"
+import { MOCK_EVENTS, MOCK_PLACES } from "@/data/mockData"
+import { MOCK_USER } from '@/data/mockUser'
+import { eventRoute, placeRoute, routes } from '@/navigation/routes'
 
 import { useAppStore } from "@/store/useAppStore"
 import { useTheme } from '@/context/ThemeProvider'
+import { shareContent } from '@/services/sharing'
+import { radius } from '@/constants/radius';
+import { spacing } from '@/constants/spacing';
+import { typography } from '@/constants/typography';
 
 export default function Home() {
   const router = useRouter()
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
+  const tabLayout = useTabScreenLayout()
+  const isIOS = Platform.OS === 'ios'
+  const [actionsWidth, setActionsWidth] = useState(0)
+  // Keep three complete circles visible, including both gutters and the gaps.
+  const actionsViewportWidth = actionsWidth || viewportWidth - insets.left - insets.right - spacing.md * 2
+  const actionSize = Math.min(96, Math.max(0, (actionsViewportWidth - spacing.md * 2 - spacing.sm * 2) / 3))
   const { isDark } = useTheme()
   const logout = useAppStore((state) => state.logout)
   const selectPlace = useAppStore((state) => state.selectPlace)
@@ -71,6 +91,14 @@ export default function Home() {
     { label: 'Instagram', icon: 'logo-instagram' as const },
   ]
 
+  const handleCommunityShare = async () => {
+    await shareContent({
+      title: 'Pink Plug community update',
+      message: 'Quick safety update: the area around Florida Road has had some increased incidents after midnight this week. Stay safe everyone.',
+      url: 'https://thepinkplug.app/community',
+    })
+  }
+
   const addComment = () => {
     const trimmed = commentDraft.trim()
     if (!trimmed) return
@@ -83,67 +111,92 @@ export default function Home() {
   }
 
   return (
-    <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
+    <SafeAreaView edges={tabLayout.edges} style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        {...tabLayout.scrollProps}
+        style={isIOS && styles.scrollIOS}
+        contentContainerStyle={[styles.content, tabLayout.contentStyle]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          {showNotifications && (
-            <View style={styles.overlayCard}>
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Notifications</Text>
-                <Pressable onPress={() => setShowNotifications(false)}>
-                  <Text style={styles.closeText}>Close</Text>
-                </Pressable>
-              </View>
-              {notifications.map((item) => (
-                <View key={item.id} style={styles.notificationItem}>
-                  <View style={styles.notificationDot} />
-                  <View style={styles.notificationBody}>
-                    <Text style={styles.notificationTitle}>{item.title}</Text>
-                    <Text style={styles.notificationDetail}>{item.detail}</Text>
-                    <Text style={styles.notificationTime}>{item.time}</Text>
-                  </View>
+          <Modal
+            visible={showNotifications}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowNotifications(false)}
+          >
+            <View style={styles.notificationModalOverlay}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close notifications"
+                onPress={() => setShowNotifications(false)}
+                style={styles.notificationBackdrop}
+              />
+              <GlassCard level="hero" edge="glow" style={styles.overlayCard}>
+                <View style={styles.sheetHeader}>
+                  <Text style={[styles.sheetTitle, isDark && styles.darkText]}>Notifications</Text>
+                  <Pressable onPress={() => setShowNotifications(false)}>
+                    <Text style={styles.closeText}>Close</Text>
+                  </Pressable>
                 </View>
-              ))}
+                {notifications.map((item) => (
+                  <View key={item.id} style={styles.notificationItem}>
+                    <View style={styles.notificationDot} />
+                    <View style={styles.notificationBody}>
+                      <Text style={[styles.notificationTitle, isDark && styles.darkText]}>{item.title}</Text>
+                      <Text style={[styles.notificationDetail, isDark && styles.darkSecondaryText]}>{item.detail}</Text>
+                      <Text style={[styles.notificationTime, isDark && styles.darkMutedText]}>{item.time}</Text>
+                    </View>
+                  </View>
+                ))}
+              </GlassCard>
             </View>
-          )}
+          </Modal>
 
           <Text style={[styles.eyebrow, isDark && styles.darkText]}>SANDTON • FRIDAY 11 SEPT</Text>
           <Text style={[styles.title, isDark && styles.darkText]}>The Pink Plug</Text>
-          <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Welcome back, {MOCK_USER.name.split(' ')[0]} 🌈</Text>
+          <View style={styles.greetingRow}>
+            <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Welcome back, {MOCK_USER.name.split(' ')[0]}</Text>
+            <Image
+              source={require('@/imports/Fingerprint New_Images/Fingerprint New_ImgID1.png')}
+              style={styles.greetingAvatar}
+              accessibilityLabel="Fingerprint avatar"
+            />
+          </View>
         </View>
 
         <NotificationBar
           title="Emergency updates"
           subtitle="3 trusted contacts are active"
           ctaLabel="SOS"
-          onPress={() => router.push('/safety')}
+          onPress={() => router.push(routes.safety)}
         />
 
         <ScrollView
           horizontal
+          style={isIOS && styles.actionsViewportIOS}
+          onLayout={isIOS ? (event) => setActionsWidth(event.nativeEvent.layout.width) : undefined}
+          contentInsetAdjustmentBehavior={isIOS ? 'never' : undefined}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.actions}
         >
-          {[
-            ["map-outline", "Pink Route", "/(tabs)/route"],
-            ["location-outline", "Nearby", "/(tabs)/explore"],
-            ["calendar-outline", "Events", "/(tabs)/explore"],
-            ["book-outline", "Directory", "/directory"],
-            ["car-outline", "Travel", "/travel"],
-            ["shield-checkmark-outline", "Safety", "/safety"],
-          ].map(([icon, label, href]) => (
+          {([
+            ["map-outline", "Pink Route", routes.route],
+            ["location-outline", "Nearby", routes.explore],
+            ["calendar-outline", "Events", routes.explore],
+            ["book-outline", "Directory", routes.directory],
+            ["car-outline", "Travel", routes.travel],
+            ["shield-checkmark-outline", "Safety", routes.safety],
+          ] as Array<[string, string, Href]>).map(([icon, label, href]) => (
             <Pressable
               key={label}
               accessibilityRole="button"
               accessibilityLabel={label}
-              onPress={() => router.push(href as never)}
-              style={styles.action}
+              onPress={() => router.push(href)}
+              style={[styles.action, isDark && styles.actionDark, isIOS && { width: actionSize, height: actionSize, flexShrink: 0 }]}
             >
               <Ionicons name={icon as any} size={20} color={colors.primary} />
-              <Text style={styles.actionLabel}>{label}</Text>
+              <Text style={[styles.actionLabel, isDark && styles.darkSecondaryText]}>{label}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -154,7 +207,7 @@ export default function Home() {
           onAction={() => Alert.alert('Circle of Love', 'Support the community campaign and join the next event.')}
         />
         <View style={styles.featuredWrap}>
-          <AnimatedCard>
+          <AnimatedCard viewportHeight={viewportHeight} pressFeedback>
             <CircleOfLoveCard layout="hero" />
           </AnimatedCard>
         </View>
@@ -162,7 +215,7 @@ export default function Home() {
         <SectionHeader
           title="Nearby Spaces"
           action="See all"
-          onAction={() => router.push("/(tabs)/explore")}
+          onAction={() => router.push(routes.explore)}
         />
         <FlatList
           horizontal
@@ -170,15 +223,15 @@ export default function Home() {
           keyExtractor={(item) => item.id}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontal}
-          renderItem={({ item }) => (
-            <AnimatedCard>
+          renderItem={({ item, index }) => (
+            <AnimatedCard index={index} style={isIOS ? { width: Math.max(0, actionsViewportWidth - spacing.md * 2) } : undefined}>
               <NearbyCard
                 place={item}
                 saved={saved.includes(item.id)}
                 onToggleSave={() => toggle(item.id)}
                 onPress={() => {
                   selectPlace(item)
-                  router.push(`/places/${item.id}` as never)
+                  router.push(placeRoute(item.id))
                 }}
               />
             </AnimatedCard>
@@ -187,35 +240,33 @@ export default function Home() {
         <SectionHeader
           title="Upcoming Events"
           action="See all"
-          onAction={() => router.push("/(tabs)/explore")}
+          onAction={() => router.push(routes.explore)}
         />
-        <AnimatedList>
-          <View style={styles.stack}>
-          {MOCK_EVENTS.slice(0, 3).map((event) => (
-            <AnimatedCard key={event.id}>
+        <View style={styles.stack}>
+          {MOCK_EVENTS.slice(0, 3).map((event, index) => (
+            <AnimatedCard key={event.id} index={index} viewportHeight={viewportHeight} pressFeedback>
               <EventCard
                 event={event}
                 onPress={() => {
                   selectEvent(event)
-                  router.push(`/events/${event.id}` as never)
+                  router.push(eventRoute(event.id))
                 }}
               />
             </AnimatedCard>
           ))}
-          </View>
-        </AnimatedList>
+        </View>
         <SectionHeader
           title="Community Updates"
           action="Read all"
-          onAction={() => router.push("/(tabs)/community")}
+          onAction={() => router.push(routes.community)}
         />
-        <AnimatedCard>
+        <AnimatedCard viewportHeight={viewportHeight} pressFeedback>
           <Card style={styles.communityCard}>
           <View style={styles.postAuthorRow}>
             <Ionicons name="location-outline" size={15} color={colors.primary} />
-            <Text style={styles.postAuthor}>Lerato Khumalo • 8h ago</Text>
+            <Text style={[styles.postAuthor, isDark && styles.darkText]}>Lerato Khumalo • 8h ago</Text>
           </View>
-          <Text style={styles.post}>
+          <Text style={[styles.post, isDark && styles.darkSecondaryText]}>
             Quick safety update: the area around Florida Road has had some
             increased incidents after midnight this week. Stay safe everyone.
           </Text>
@@ -224,7 +275,7 @@ export default function Home() {
             {shareChannels.map((channel) => (
               <Pressable
                 key={channel.label}
-                onPress={() => Alert.alert('Share', `Sharing via ${channel.label}`)}
+                onPress={handleCommunityShare}
                 style={styles.shareButton}
               >
                 <Ionicons name={channel.icon} size={14} color={colors.primary} />
@@ -234,7 +285,7 @@ export default function Home() {
           </View>
 
           <View style={styles.commentSection}>
-            <Text style={styles.commentTitle}>Comments</Text>
+            <Text style={[styles.commentTitle, isDark && styles.darkText]}>Comments</Text>
             {comments.map((comment) => (
               <View key={comment.id} style={styles.commentRow}>
                 <Text style={styles.commentAuthor}>{comment.author}</Text>
@@ -266,17 +317,30 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
-  content: { paddingBottom: 110, paddingHorizontal: 16 },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  scrollIOS: { flex: 1, width: '100%', backgroundColor: 'transparent' },
+  actionsViewportIOS: { width: '100%', flexGrow: 0, flexShrink: 0 },
+  safeDark: { backgroundColor: 'transparent' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
+  darkMutedText: { color: darkColors.muted },
+  content: { paddingBottom: 110, paddingHorizontal: spacing.md },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 24,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
     position: "relative",
     zIndex: 20,
+  },
+  greetingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  greetingAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   topBar: {
     flexDirection: "row",
@@ -361,21 +425,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   overlayCard: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    right: 14,
-    zIndex: 140,
-    backgroundColor: '#fff',
+    width: '100%',
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 20,
+  },
+  notificationModalOverlay: {
+    flex: 1,
+    paddingTop: 96,
+    paddingHorizontal: 14,
+  },
+  notificationBackdrop: {
+    ...StyleSheet.absoluteFill,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -440,18 +500,26 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: colors.primary,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: typography.label.fontSize,
+    lineHeight: typography.label.lineHeight,
+    fontWeight: typography.label.fontWeight,
     letterSpacing: 1,
   },
   title: {
     color: colors.textPrimary,
-    fontSize: 29,
-    fontWeight: "600",
-    marginTop: 6,
+    fontSize: typography.screenTitle.fontSize,
+    lineHeight: typography.screenTitle.lineHeight,
+    fontWeight: typography.screenTitle.fontWeight,
+    letterSpacing: typography.screenTitle.letterSpacing,
+    marginTop: spacing.xxs,
   },
-  subtitle: { color: colors.textSecondary, fontSize: 14, marginTop: 4 },
-  actions: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingVertical: 20 },
+  subtitle: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySmall.fontSize,
+    lineHeight: typography.bodySmall.lineHeight,
+    marginTop: spacing.xxs,
+  },
+  actions: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xl },
   action: {
     width: 96,
     height: 96,
@@ -461,23 +529,27 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.softLavender,
+    backgroundColor: colors.surface,
+  },
+  actionDark: {
+    backgroundColor: darkColors.surface,
+    borderColor: darkColors.border,
   },
   featuredWrap: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
   },
   actionLabel: {
     color: colors.textSecondary,
     width: '100%',
     textAlign: 'center',
-    fontSize: 9,
-    lineHeight: 11,
-    marginTop: 7,
+    fontSize: typography.caption.fontSize,
+    lineHeight: typography.caption.lineHeight,
+    marginTop: spacing.xs,
     fontWeight: "600",
   },
-  horizontal: { gap: 12, paddingHorizontal: 16, paddingBottom: 24 },
-  stack: { gap: 10, marginBottom: 24, paddingHorizontal: 16 },
+  horizontal: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
+  stack: { gap: spacing.sm, marginBottom: spacing.xl, paddingHorizontal: spacing.md },
   communityCard: {
     alignSelf: 'stretch',
     marginHorizontal: 16,
@@ -577,4 +649,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 })
-

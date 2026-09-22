@@ -2,21 +2,23 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
 import { useAppStore } from '@/store/useAppStore';
 import { mockOtpService } from '@/services/mockOtpService';
 import { useTheme } from '@/context/ThemeProvider';
+import { routes } from '@/navigation/routes';
 
 const AUTH_METHODS = ['Gmail', 'Apple'];
 
@@ -40,14 +42,14 @@ export default function Login() {
   const [biometricChecking, setBiometricChecking] = useState(false);
   const palette = isDark
     ? {
-        background: '#0A0712',
-        surface: '#161224',
-        softSurface: '#211932',
-        input: '#110D1D',
-        border: '#3B2B55',
-        text: '#F8FAFC',
-        secondaryText: '#C4B5D9',
-        muted: '#A895C0',
+        background: darkColors.background,
+        surface: darkColors.surface,
+        softSurface: darkColors.softSurface,
+        input: darkColors.input,
+        border: darkColors.border,
+        text: darkColors.textPrimary,
+        secondaryText: darkColors.textSecondary,
+        muted: darkColors.muted,
       }
     : {
         background: colors.background,
@@ -143,9 +145,9 @@ export default function Login() {
   }, [setLoggingOut]);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+    <SafeAreaView style={styles.safe}>
       <LinearGradient
-        colors={isDark ? ['#0A0712', '#120C1E', '#0A0712'] : ['#F5F0FF', '#F8F3FF', '#F1E8FF']}
+        colors={['transparent', 'transparent', 'transparent']}
         style={styles.gradient}
       >
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -161,7 +163,7 @@ export default function Login() {
           <Text style={[styles.subtitle, { color: palette.secondaryText }]}>Sign in to continue to your Pink Plug account.</Text>
 
           {step === 'email' ? (
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+            <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>Email address</Text>
               <TextInput
                 value={email}
@@ -197,7 +199,7 @@ export default function Login() {
                 </LinearGradient>
               </Pressable>
 
-              <Pressable onPress={() => router.push('/change-password' as never)} style={styles.linkButton}>
+              <Pressable onPress={() => router.push(routes.changePassword)} style={styles.linkButton}>
                 <Text style={styles.linkText}>Forgot password?</Text>
               </Pressable>
 
@@ -207,7 +209,7 @@ export default function Login() {
 
               <View style={styles.registerLinkRow}>
                 <Text style={[styles.registerPrompt, { color: palette.secondaryText }]}>Don’t have an account?</Text>
-                <Pressable onPress={() => router.push('/register' as never)}>
+                <Pressable onPress={() => router.push('/register')}>
                   <Text style={styles.registerLink}>Sign Up</Text>
                 </Pressable>
               </View>
@@ -240,9 +242,9 @@ export default function Login() {
                 })}
               </View>
 
-            </View>
+            </GlassCard>
           ) : (
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>OTP verification</Text>
               <Text style={[styles.helperText, { color: palette.secondaryText }]}>
                 Enter the 6-digit code sent to {email}
@@ -282,7 +284,7 @@ export default function Login() {
                   <Text style={styles.linkText}>Edit email</Text>
                 </Pressable>
               </View>
-            </View>
+            </GlassCard>
           )}
 
           {!otpSent && (
@@ -291,14 +293,14 @@ export default function Login() {
 
           {biometricChecking && (
             <View style={styles.biometricOverlay} pointerEvents="none">
-                <View style={[styles.biometricSheet, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+                <GlassCard intensity={35} style={[styles.biometricSheet, { borderColor: palette.border }]}> 
                 <View style={styles.biometricIconWrap}>
                   <Ionicons name="finger-print" size={52} color={colors.primary} />
                 </View>
                 <Text style={[styles.biometricTitle, { color: palette.text }]}>Face ID / Fingerprint</Text>
                 <Text style={[styles.biometricSubtitle, { color: palette.secondaryText }]}>Scanning for secure access...</Text>
                 <View style={styles.scanBar} />
-              </View>
+              </GlassCard>
             </View>
           )}
         </ScrollView>
@@ -308,7 +310,7 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   gradient: { flex: 1 },
   content: {
     flexGrow: 1,
@@ -375,8 +377,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     borderRadius: 22,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
     padding: 18,
@@ -470,8 +473,9 @@ const styles = StyleSheet.create({
   },
   biometricSheet: {
     width: '80%',
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     borderRadius: 24,
+    overflow: 'hidden',
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,

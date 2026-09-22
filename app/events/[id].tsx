@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Linking, Pressable, SafeAreaView, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { MOCK_EVENTS } from '@/data/mockData';
 import { useTheme } from '@/context/ThemeProvider';
 
@@ -24,7 +25,7 @@ export default function EventDetail() {
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
           <Text style={styles.back}>‹  Back</Text>
         </Pressable>
         <Image
@@ -56,14 +57,14 @@ export default function EventDetail() {
               value={registration.name}
               onChangeText={(name) => setRegistration((current) => ({ ...current, name }))}
               placeholder="Full name"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               style={[styles.registrationInput, isDark && styles.registrationInputDark]}
             />
             <TextInput
               value={registration.email}
               onChangeText={(email) => setRegistration((current) => ({ ...current, email }))}
               placeholder="Email address"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               keyboardType="email-address"
               autoCapitalize="none"
               style={[styles.registrationInput, isDark && styles.registrationInputDark]}
@@ -72,7 +73,7 @@ export default function EventDetail() {
               value={registration.phone}
               onChangeText={(phone) => setRegistration((current) => ({ ...current, phone }))}
               placeholder="Phone number"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               keyboardType="phone-pad"
               style={[styles.registrationInput, isDark && styles.registrationInputDark]}
             />
@@ -93,8 +94,8 @@ export default function EventDetail() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' }, darkText: { color: '#F8FAFC' }, darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' }, darkText: { color: darkColors.textPrimary }, darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 60 },
   back: { color: colors.primary, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   hero: { width: '100%', height: 240, borderRadius: 24, marginBottom: 14 },
@@ -107,6 +108,6 @@ const styles = StyleSheet.create({
   copy: { color: colors.textSecondary, fontSize: 14, lineHeight: 22 },
   registrationForm: { gap: 10, marginTop: 4 },
   registrationInput: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: colors.textPrimary, fontSize: 14 },
-  registrationInputDark: { backgroundColor: '#110D1D', borderColor: '#3B2B55', color: '#F8FAFC' },
+  registrationInputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
   registrationSuccess: { color: colors.primary, fontSize: 14, lineHeight: 21, fontWeight: '600', marginTop: 4 },
 });

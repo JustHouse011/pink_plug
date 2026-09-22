@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import type { Event, Place, Review, Tab, TransitMode, Waypoint } from '@/types';
 
 type ReviewTarget = 'event' | 'place';
 
 interface AppState {
+  hasHydrated: boolean;
   activeTab: Tab;
   onboardingComplete: boolean;
   isAuthenticated: boolean;
@@ -31,6 +33,7 @@ interface AppState {
   selectPlace: (place: Place) => void;
   selectEvent: (event: Event) => void;
   addReview: (target: ReviewTarget, targetId: string, review: { rating: number; headline: string; comment: string }) => void;
+  setHasHydrated: (value: boolean) => void;
 }
 
 const STORAGE_KEY = 'pink-plug-store';
@@ -45,6 +48,7 @@ const resetAuthState = (): Pick<AppState, 'activeTab' | 'isAuthenticated' | 'sha
 });
 
 export const useAppStore = create<AppState>((set) => ({
+  hasHydrated: false,
   activeTab: 'home',
   onboardingComplete: false,
   isAuthenticated: false,
@@ -103,6 +107,7 @@ export const useAppStore = create<AppState>((set) => ({
       },
     };
   }),
+  setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 }));
 
 const persistedKeys = ['onboardingComplete', 'isAuthenticated', 'shareLocation', 'waypoints', 'transitMode', 'reviewCache'] as const;
@@ -127,14 +132,47 @@ AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
   } catch {
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   }
-}).catch(() => undefined);
+}).catch(() => undefined).finally(() => {
+  useAppStore.getState().setHasHydrated(true);
+});
+
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 useAppStore.subscribe((state) => {
+  if (!state.hasHydrated) return;
+
   if (!state.isAuthenticated) {
+    if (persistTimer) clearTimeout(persistTimer);
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
     return;
   }
 
   const persistedState = Object.fromEntries(persistedKeys.map((key) => [key, state[key]])) as PersistedState;
-  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState)).catch(() => undefined);
+  const serializedState = JSON.stringify(persistedState);
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    AsyncStorage.setItem(STORAGE_KEY, serializedState).catch(() => undefined);
+  }, 150);
 });
+
+export const useAuthState = () => useAppStore(useShallow((state) => ({
+  isAuthenticated: state.isAuthenticated,
+  onboardingComplete: state.onboardingComplete,
+  hasHydrated: state.hasHydrated,
+})));
+
+export const useShellState = () => useAppStore(useShallow((state) => ({
+  isLoggingOut: state.isLoggingOut,
+  headerMenuVisible: state.headerMenuVisible,
+  setHeaderMenuVisible: state.setHeaderMenuVisible,
+  showNotifications: state.showNotifications,
+  setShowNotifications: state.setShowNotifications,
+})));
+
+export const useRouteState = () => useAppStore(useShallow((state) => ({
+  waypoints: state.waypoints,
+  transitMode: state.transitMode,
+  addWaypoint: state.addWaypoint,
+  removeWaypoint: state.removeWaypoint,
+  setTransitMode: state.setTransitMode,
+})));

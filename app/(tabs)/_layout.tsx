@@ -1,9 +1,14 @@
 ﻿import { Tabs } from 'expo-router';
-import { Pressable, Text, View, StyleSheet } from 'react-native';
+import { Platform, Pressable, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/constants/colors';
-import { useAppStore } from '@/store/useAppStore';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FLOATING_TAB_HEIGHT, getTabLayout } from '@/layout/tabLayout';
+import { colors, darkColors } from '@/constants/colors';
+import { glass } from '@/constants/glass';
+import { radius } from '@/constants/radius';
+import { spacing } from '@/constants/spacing';
 import { useTheme } from '@/context/ThemeProvider';
 
 const items = [
@@ -14,54 +19,79 @@ const items = [
 ];
 
 export default function TabLayout() {
-  const setActiveTab = useAppStore((state) => state.setActiveTab);
+  // The native stack's content frame may differ from the full-window frame.
+  // Measure remaining safe area here instead of inheriting already-consumed insets.
+  return Platform.OS === 'ios'
+    ? <SafeAreaProvider><TabNavigator /></SafeAreaProvider>
+    : <TabNavigator />;
+}
+
+function TabNavigator() {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const navigationBottom = Math.max(insets.bottom + 10, 24);
+  const { barBottom, contentBottomPadding } = getTabLayout(insets.bottom, Platform.OS);
 
   return (
     <Tabs
+      initialRouteName="home"
+      // barBottom owns the system inset; the bar's internal padding is decorative.
+      safeAreaInsets={Platform.OS === 'ios' ? { bottom: 0 } : undefined}
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        animation: 'fade',
+        tabBarShowLabel: true,
+        tabBarLabelStyle: styles.label,
         sceneStyle: {
-          paddingBottom: 110 + insets.bottom,
-          backgroundColor: isDark ? '#0A0712' : colors.background,
+          paddingBottom: Platform.OS === 'ios' ? 0 : 24 + insets.bottom,
+          backgroundColor: 'transparent',
         },
-        tabBarStyle: [styles.bar, { bottom: navigationBottom }, isDark && styles.barDark],
-        tabBarButton: (props: any) => <Pressable {...props} style={styles.item} />,
+        tabBarStyle: [styles.bar, { bottom: barBottom }, isDark && styles.barDark],
+        tabBarBackground: () => (
+          <LinearGradient
+            pointerEvents="none"
+            colors={isDark ? glass.gradientBorder.emphasized : glass.gradientBorder.lightEmphasized}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.barGradient}
+          >
+            <BlurView
+              intensity={isDark ? glass.dark.hero.blurIntensity : glass.light.standard.blurIntensity}
+              tint={isDark ? 'dark' : 'light'}
+              style={[styles.barBackground, { backgroundColor: isDark ? glass.dark.hero.background : glass.light.hero.background }]}
+            />
+          </LinearGradient>
+        ),
+        tabBarButton: (props: any) => <Pressable {...props} style={Platform.OS === 'ios' ? [props.style, styles.item] : styles.item} />,
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <NavIcon item={items[0]} focused={focused} isDark={isDark} onPress={() => setActiveTab('home')} />
-          ),
+          tabBarLabel: items[0].label,
+          tabBarIcon: () => <NavIcon item={items[0]} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <NavIcon item={items[1]} focused={focused} isDark={isDark} onPress={() => setActiveTab('explore')} />
-          ),
+          tabBarLabel: items[1].label,
+          tabBarIcon: () => <NavIcon item={items[1]} />,
         }}
       />
       <Tabs.Screen
         name="community"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <NavIcon item={items[2]} focused={focused} isDark={isDark} onPress={() => setActiveTab('community')} />
-          ),
+          tabBarLabel: items[2].label,
+          tabBarIcon: () => <NavIcon item={items[2]} />,
         }}
       />
       <Tabs.Screen
         name="route"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <NavIcon item={items[3]} focused={focused} isDark={isDark} onPress={() => setActiveTab('route')} />
-          ),
+          tabBarLabel: items[3].label,
+          // The map does not scroll: reserve its controls' clearance in the scene.
+          ...(Platform.OS === 'ios' && { sceneStyle: { paddingBottom: contentBottomPadding, backgroundColor: 'transparent' } }),
+          tabBarIcon: () => <NavIcon item={items[3]} />,
         }}
       />
       <Tabs.Screen
@@ -74,20 +104,12 @@ export default function TabLayout() {
   );
 }
 
-function NavIcon({ item, focused, isDark }: { item: (typeof items)[number]; focused: boolean; isDark: boolean; onPress: () => void }) {
+function NavIcon({ item }: { item: (typeof items)[number] }) {
   return (
     <View style={styles.icon}>
-      <View style={[styles.iconCircle, focused && (isDark ? styles.activeDark : styles.active)]}>
-        <Ionicons name={item.icon} size={21} color={colors.primary} />
+      <View style={styles.iconCircle}>
+        <Ionicons name={item.icon} size={24} color={colors.primary} />
       </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-        style={[styles.label, focused && styles.activeText]}
-      >
-        {item.label}
-      </Text>
     </View>
   );
 }
@@ -95,27 +117,32 @@ function NavIcon({ item, focused, isDark }: { item: (typeof items)[number]; focu
 const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
-    left: 18,
-    right: 18,
-    height: 88,
-    borderRadius: 26,
+    left: spacing.lg,
+    right: spacing.lg,
+    height: FLOATING_TAB_HEIGHT,
+    borderRadius: radius.xl,
     borderTopWidth: 0,
-    borderColor: 'rgba(122, 92, 244, 0.08)',
-    backgroundColor: '#FFFFFF',
-    elevation: 8,
-    shadowColor: '#1F1230',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    paddingTop: 10,
-    paddingBottom: 16,
+    backgroundColor: 'transparent',
+    elevation: 0,
+    shadowOpacity: 0,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   barDark: {
-    backgroundColor: '#161224',
-    borderWidth: 1,
-    borderTopWidth: 1,
-    borderColor: 'rgba(51, 65, 85, 0.8)',
-    shadowColor: '#000',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderTopWidth: 0,
+  },
+  barBackground: {
+    flex: 1,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+  },
+  barGradient: {
+    flex: 1,
+    borderRadius: radius.xl,
+    padding: 1.5,
+    overflow: 'hidden',
   },
   item: {
     flex: 1,
@@ -128,42 +155,25 @@ const styles = StyleSheet.create({
     width: 80,
     maxWidth: '100%',
     minWidth: 0,
-    height: 64,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 0,
   },
   iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 44,
+    height: 44,
+    borderRadius: radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  active: {
-    backgroundColor: '#FDE8FA',
-    shadowColor: '#E63CD8',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  activeDark: {
-    backgroundColor: '#7C3AED',
-    shadowColor: '#7C3AED',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
   },
   label: {
     color: '#E63CD8',
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.15,
-    marginTop: 3,
-    width: 80,
-    textAlign: 'center',
+    marginTop: 0,
     includeFontPadding: false,
   },
-  activeText: { color: '#E63CD8' },
 });
 

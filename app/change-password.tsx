@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Button from '@/components/ui/Button';
-import { colors } from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
+import { colors, darkColors } from '@/constants/colors';
 import { mockOtpService } from '@/services/mockOtpService';
 import { useTheme } from '@/context/ThemeProvider';
 
@@ -89,13 +91,13 @@ export default function ChangePassword() {
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
           <Text style={styles.back}>‹  Back</Text>
         </Pressable>
 
         <Text accessibilityRole="header" style={[styles.title, isDark && styles.darkText]}>Change password</Text>
 
-        <View style={[styles.card, isDark && styles.cardDark]}>
+        <GlassCard style={[styles.card, isDark && styles.cardDark]}>
           <Text style={[styles.infoText, isDark && styles.darkSecondaryText]}>We’ll send a one-time verification code to your registered email or phone before updating your password.</Text>
 
           <Text style={[styles.label, isDark && styles.darkText]}>Current password</Text>
@@ -103,7 +105,7 @@ export default function ChangePassword() {
             value={currentPassword}
             onChangeText={setCurrentPassword}
             placeholder="Enter your current password"
-            placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+            placeholderTextColor={isDark ? darkColors.muted : colors.muted}
             secureTextEntry
             style={[styles.input, isDark && styles.inputDark]}
           />
@@ -113,7 +115,7 @@ export default function ChangePassword() {
             value={newPassword}
             onChangeText={setNewPassword}
             placeholder="Create a new password"
-            placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+            placeholderTextColor={isDark ? darkColors.muted : colors.muted}
             secureTextEntry
             style={[styles.input, isDark && styles.inputDark]}
           />
@@ -123,7 +125,7 @@ export default function ChangePassword() {
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             placeholder="Confirm your new password"
-            placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+            placeholderTextColor={isDark ? darkColors.muted : colors.muted}
             secureTextEntry
             style={[styles.input, isDark && styles.inputDark]}
           />
@@ -134,7 +136,7 @@ export default function ChangePassword() {
           </View>
 
           {status ? <Text style={styles.status}>{status}</Text> : null}
-        </View>
+        </GlassCard>
 
         <Button label={otpSent ? 'Send OTP again' : 'Send OTP'} onPress={handleSendOtp} />
       </ScrollView>
@@ -146,7 +148,7 @@ export default function ChangePassword() {
         onRequestClose={() => setOtpModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, isDark && styles.modalCardDark]}>
+          <GlassCard intensity={35} style={[styles.modalCard, isDark && styles.modalCardDark]}>
             <Text style={[styles.modalTitle, isDark && styles.darkText]}>Enter verification code</Text>
             <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>Your mock OTP was sent to your registered email or phone.</Text>
             <View style={[styles.mockCodeBox, isDark && styles.mockCodeBoxDark]}>
@@ -158,7 +160,7 @@ export default function ChangePassword() {
               value={otpCode}
               onChangeText={setOtpCode}
               placeholder="Enter 6-digit code"
-              placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+              placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               keyboardType="number-pad"
               maxLength={6}
               style={[styles.input, isDark && styles.inputDark]}
@@ -167,7 +169,7 @@ export default function ChangePassword() {
               <Button label="Cancel" onPress={() => setOtpModalVisible(false)} variant="secondary" style={styles.modalButton} />
               <Button label="Verify" onPress={handleVerifyOtp} style={styles.modalButton} />
             </View>
-          </View>
+          </GlassCard>
         </View>
       </Modal>
     </SafeAreaView>
@@ -175,22 +177,23 @@ export default function ChangePassword() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 120 },
   back: { color: colors.primary, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   title: { color: colors.textPrimary, fontSize: 28, fontWeight: '600', marginBottom: 16 },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
     borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
     marginBottom: 18,
   },
-  cardDark: { backgroundColor: '#161224', borderColor: '#3B2B55' },
+  cardDark: { backgroundColor: 'transparent', borderColor: darkColors.border },
   infoText: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginBottom: 12 },
   label: { color: colors.textPrimary, fontWeight: '600', fontSize: 12, marginBottom: 8, marginTop: 10 },
   input: {
@@ -203,24 +206,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textPrimary,
   },
-  inputDark: { backgroundColor: '#110D1D', borderColor: '#3B2B55', color: '#F8FAFC' },
+  inputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
   tipBox: {
     backgroundColor: '#F6F1FF',
     borderRadius: 16,
     padding: 12,
     marginTop: 18,
   },
-  tipBoxDark: { backgroundColor: '#231A3D', borderWidth: 1, borderColor: '#3B2B55' },
+  tipBoxDark: { backgroundColor: darkColors.softSurface, borderWidth: 1, borderColor: darkColors.border },
   tipTitle: { color: colors.textPrimary, fontWeight: '600', fontSize: 13, marginBottom: 4 },
   tipText: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   status: { marginTop: 12, color: colors.primary, fontSize: 12, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(10, 7, 18, 0.65)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modalCard: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 22, borderWidth: 1, borderColor: colors.border, padding: 20 },
-  modalCardDark: { backgroundColor: '#161224', borderColor: '#3B2B55' },
+  modalCard: { width: '100%', maxWidth: 420, backgroundColor: 'transparent', borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, padding: 20 },
+  modalCardDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border },
   modalTitle: { color: colors.textPrimary, fontSize: 20, fontWeight: '700' },
   modalCopy: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 8, marginBottom: 14 },
   mockCodeBox: { backgroundColor: '#F6F1FF', borderRadius: 14, alignItems: 'center', paddingVertical: 12, marginBottom: 14 },
-  mockCodeBoxDark: { backgroundColor: '#231A3D' },
+  mockCodeBoxDark: { backgroundColor: darkColors.softSurface },
   mockCodeLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
   mockCode: { color: colors.primary, fontSize: 24, fontWeight: '700', letterSpacing: 4, marginTop: 4 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -10,14 +9,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { pickContactFromPhoneBook, normalizePhoneNumber } from '@/services/contacts';
 import { useEmergencyContactsStore } from '@/store/useEmergencyContactsStore';
+import { useTheme } from '@/context/ThemeProvider';
+import GlassCard from '@/components/ui/GlassCard';
 
 export default function EmergencyContacts() {
   const router = useRouter();
+  const { isDark } = useTheme();
   const contacts = useEmergencyContactsStore((state) => state.contacts);
   const addContact = useEmergencyContactsStore((state) => state.addContact);
   const removeContact = useEmergencyContactsStore((state) => state.removeContact);
@@ -28,30 +31,14 @@ export default function EmergencyContacts() {
   const [relationship, setRelationship] = useState('Friend');
 
   const handleNativePick = async () => {
-    if (contacts.length >= limit) {
-      Alert.alert('Limit reached', 'You can add up to 5 close contacts.');
+    const result = await pickContactFromPhoneBook();
+    if (!result) {
+      Alert.alert('No contact selected', 'Please choose a valid contact with a phone number.');
       return;
     }
 
-    const result = await pickContactFromPhoneBook();
-    if (!result) {
-      const demoContact = {
-        name: 'Bongani Nombamba',
-        phone: '+27720000000',
-        relationship: 'Trusted contact',
-      };
-
-      addContact({
-        name: demoContact.name,
-        phone: normalizePhoneNumber(demoContact.phone),
-        relationship: demoContact.relationship,
-        isVerified: true,
-        canReceiveSms: true,
-        canReceiveCall: true,
-        shareLiveLocation: true,
-      });
-
-      Alert.alert('Demo contact added', 'Phone-book access is unavailable in this environment, so a sample trusted contact was added instead.');
+    if (contacts.length >= limit) {
+      Alert.alert('Limit reached', 'You can add up to 5 close contacts.');
       return;
     }
 
@@ -107,13 +94,13 @@ export default function EmergencyContacts() {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={styles.backButton}>
             <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
           </Pressable>
-          <Text accessibilityRole="header" style={styles.title}>Emergency Contacts</Text>
+          <Text style={[styles.title, isDark && styles.darkText]}>Emergency Contacts</Text>
         </View>
 
-        <Text style={styles.subtitle}>Trusted people who will receive SOS notices and safety updates.</Text>
+        <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Trusted people who will receive SOS notices and safety updates.</Text>
 
         <Pressable style={styles.primaryButton} onPress={handleNativePick}>
           <Ionicons name="people-outline" size={18} color="#fff" />
@@ -125,20 +112,20 @@ export default function EmergencyContacts() {
             value={name}
             onChangeText={setName}
             placeholder="Contact name"
-            style={styles.input}
+            style={[styles.input, isDark && styles.inputDark]}
           />
           <TextInput
             value={phone}
             onChangeText={setPhone}
             placeholder="Phone number"
             keyboardType="phone-pad"
-            style={styles.input}
+            style={[styles.input, isDark && styles.inputDark]}
           />
           <TextInput
             value={relationship}
             onChangeText={setRelationship}
             placeholder="Relationship"
-            style={styles.input}
+            style={[styles.input, isDark && styles.inputDark]}
           />
 
           <Pressable style={styles.secondaryButton} onPress={handleManualAdd}>
@@ -147,25 +134,25 @@ export default function EmergencyContacts() {
         </View>
 
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Saved contacts</Text>
-          <Text style={styles.sectionMeta}>{contacts.length}/{limit}</Text>
+          <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Saved contacts</Text>
+          <Text style={[styles.sectionMeta, isDark && styles.darkSecondaryText]}>{contacts.length}/{limit}</Text>
         </View>
 
         {contacts.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No emergency contacts added yet.</Text>
-          </View>
+          <GlassCard level="standard" edge="subtle" style={styles.emptyCard}>
+            <Text style={[styles.emptyText, isDark && styles.darkSecondaryText]}>No emergency contacts added yet.</Text>
+          </GlassCard>
         ) : (
           contacts.map((contact) => (
-            <View key={contact.id} style={styles.card}>
-              <View style={styles.avatar}>
+            <GlassCard key={contact.id} level="standard" edge="subtle" style={styles.card}>
+              <View style={[styles.avatar, isDark && styles.avatarDark]}>
                 <Text style={styles.avatarText}>{contact.name.charAt(0).toUpperCase()}</Text>
               </View>
 
               <View style={styles.cardBody}>
-                <Text style={styles.name}>{contact.name}</Text>
-                <Text style={styles.relationship}>{contact.relationship}</Text>
-                <Text style={styles.phone}>{contact.phone}</Text>
+                <Text style={[styles.name, isDark && styles.darkText]}>{contact.name}</Text>
+                <Text style={[styles.relationship, isDark && styles.darkSecondaryText]}>{contact.relationship}</Text>
+                <Text style={[styles.phone, isDark && styles.darkSecondaryText]}>{contact.phone}</Text>
 
                 <View style={styles.badgeRow}>
                   <View style={[styles.badge, contact.isVerified ? styles.badgeVerified : styles.badgePending]}>
@@ -174,7 +161,7 @@ export default function EmergencyContacts() {
                 </View>
 
                 <View style={styles.optionRow}>
-                  <Text style={styles.optionLabel}>SMS alert</Text>
+                  <Text style={[styles.optionLabel, isDark && styles.darkSecondaryText]}>SMS alert</Text>
                   <Switch
                     value={contact.canReceiveSms}
                     onValueChange={(value) => updateContact(contact.id, { canReceiveSms: value })}
@@ -182,7 +169,7 @@ export default function EmergencyContacts() {
                 </View>
 
                 <View style={styles.optionRow}>
-                  <Text style={styles.optionLabel}>Phone call alert</Text>
+                  <Text style={[styles.optionLabel, isDark && styles.darkSecondaryText]}>Phone call alert</Text>
                   <Switch
                     value={contact.canReceiveCall}
                     onValueChange={(value) => updateContact(contact.id, { canReceiveCall: value })}
@@ -190,7 +177,7 @@ export default function EmergencyContacts() {
                 </View>
 
                 <View style={styles.optionRow}>
-                  <Text style={styles.optionLabel}>Share live GPS</Text>
+                  <Text style={[styles.optionLabel, isDark && styles.darkSecondaryText]}>Share live GPS</Text>
                   <Switch
                     value={contact.shareLiveLocation}
                     onValueChange={(value) => updateContact(contact.id, { shareLiveLocation: value })}
@@ -201,7 +188,7 @@ export default function EmergencyContacts() {
               <Pressable onPress={() => removeContact(contact.id)} style={styles.removeButton}>
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
               </Pressable>
-            </View>
+            </GlassCard>
           ))
         )}
       </ScrollView>
@@ -210,20 +197,22 @@ export default function EmergencyContacts() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 120 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   backButton: {
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  title: { flex: 1, minWidth: 0, color: colors.textPrimary, fontSize: 26, fontWeight: '700' },
+  title: { color: colors.textPrimary, fontSize: 26, fontWeight: '700' },
   subtitle: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 18 },
   primaryButton: {
     flexDirection: 'row',
@@ -238,7 +227,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   form: { gap: 10, marginBottom: 18 },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
@@ -247,13 +236,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textPrimary,
   },
+  inputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
   secondaryButton: {
-    backgroundColor: '#F1E7FF',
+    backgroundColor: colors.secondary,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  secondaryButtonText: { color: colors.primary, fontWeight: '700' },
+  secondaryButtonText: { color: '#FFFFFF', fontWeight: '700' },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { color: colors.textPrimary, fontWeight: '700', fontSize: 16 },
   sectionMeta: { color: colors.muted, fontSize: 12 },
@@ -261,11 +251,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: 12,
   },
   avatar: {
@@ -276,6 +263,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#E3D7FF',
   },
+  avatarDark: { backgroundColor: darkColors.softSurface },
   avatarText: { color: colors.primary, fontWeight: '700' },
   cardBody: { flex: 1 },
   name: { color: colors.textPrimary, fontWeight: '700', fontSize: 15 },
@@ -303,9 +291,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   emptyCard: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 16,
     padding: 18,
   },

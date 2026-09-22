@@ -2,17 +2,18 @@ import { useState } from 'react';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
 import { mockOtpService } from '@/services/mockOtpService';
 import { useTheme } from '@/context/ThemeProvider';
 
@@ -29,13 +30,13 @@ export default function Register() {
   const [enteredCode, setEnteredCode] = useState('');
   const palette = isDark
     ? {
-        background: '#0A0712',
-        surface: '#161224',
-        input: '#110D1D',
-        border: '#3B2B55',
-        text: '#F8FAFC',
-        secondaryText: '#C4B5D9',
-        muted: '#A895C0',
+        background: darkColors.background,
+        surface: darkColors.surface,
+        input: darkColors.input,
+        border: darkColors.border,
+        text: darkColors.textPrimary,
+        secondaryText: darkColors.textSecondary,
+        muted: darkColors.muted,
       }
     : {
         background: colors.background,
@@ -96,7 +97,7 @@ export default function Register() {
 
   const handleBack = () => {
     if (router.canGoBack()) {
-      router.back();
+      router.canGoBack() ? router.back() : router.replace('/');
       return;
     }
 
@@ -104,9 +105,9 @@ export default function Register() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+    <SafeAreaView style={styles.safe}>
       <LinearGradient
-        colors={isDark ? ['#0A0712', '#120C1E', '#0A0712'] : ['#F5F0FF', '#F8F3FF', '#F1E8FF']}
+        colors={['transparent', 'transparent', 'transparent']}
         style={styles.gradient}
       >
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -122,7 +123,7 @@ export default function Register() {
           <Text style={[styles.subtitle, { color: palette.secondaryText }]}>Set up your Pink Plug profile.</Text>
 
           {!verificationSent ? (
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+            <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>Name</Text>
               <TextInput
                 value={name}
@@ -175,9 +176,9 @@ export default function Register() {
                   <Text style={styles.primaryText}>{loading ? 'Sending...' : 'Send verification email'}</Text>
                 </LinearGradient>
               </Pressable>
-            </View>
+            </GlassCard>
           ) : (
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+            <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>Email verification</Text>
               <Text style={[styles.helperText, { color: palette.secondaryText }]}>Enter the 6-digit code sent to {email}</Text>
               <Text style={styles.demoOtp}>Demo code: {verificationCode}</Text>
@@ -211,7 +212,7 @@ export default function Register() {
                   <Text style={styles.linkText}>Edit details</Text>
                 </Pressable>
               </View>
-            </View>
+            </GlassCard>
           )}
         </ScrollView>
       </LinearGradient>
@@ -220,7 +221,7 @@ export default function Register() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   gradient: { flex: 1 },
   content: {
     flexGrow: 1,
@@ -247,8 +248,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     borderRadius: 22,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
     padding: 18,

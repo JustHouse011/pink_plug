@@ -5,23 +5,37 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
   View,
   StyleSheet,
-  Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/constants/colors';
-import { MOCK_USER } from '@/data/mockData';
+import { colors, darkColors } from '@/constants/colors';
+import { MOCK_USER } from '@/data/mockUser';
 import Avatar from '@/components/ui/Avatar';
 import Button from '@/components/ui/Button';
+import GlassCard from '@/components/ui/GlassCard';
 import { useAppStore } from '@/store/useAppStore';
 import { useTheme } from '@/context/ThemeProvider';
+import { routes } from '@/navigation/routes';
+
+function SettingsSwitch({ value, onValueChange }: { value: boolean; onValueChange: (value: boolean) => void }) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value }}
+      onPress={() => onValueChange(!value)}
+      style={[styles.toggle, value && styles.toggleActive]}
+    >
+      <View style={[styles.toggleThumb, value && styles.toggleThumbActive]} />
+    </Pressable>
+  );
+}
 
 export default function Settings() {
   const router = useRouter();
@@ -54,7 +68,7 @@ export default function Settings() {
 
   const handleLogout = () => {
     logout();
-    router.replace('/login' as never);
+    router.replace('/login');
   };
 
   const handleDeactivate = () => {
@@ -155,11 +169,13 @@ export default function Settings() {
   };
 
   const handleSelfieVerification = () => {
-    setSelfieVerificationStep('verifying');
-    setTimeout(() => {
-      setSelfieVerified(true);
-      setSelfieVerificationStep('success');
-    }, 1600);
+    handleTakeSelfie(() => {
+      setSelfieVerificationStep('verifying');
+      setTimeout(() => {
+        setSelfieVerified(true);
+        setSelfieVerificationStep('success');
+      }, 1600);
+    });
   };
 
   const pickPhotoOptions = () => {
@@ -173,7 +189,7 @@ export default function Settings() {
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
           <Text style={[styles.back, isDark && styles.darkText]}>‹  Back</Text>
         </Pressable>
 
@@ -192,7 +208,7 @@ export default function Settings() {
           </Pressable>
         </View>
 
-        <View style={[styles.section, isDark && styles.sectionDark]}>
+        <GlassCard style={[styles.section, isDark && styles.sectionDark]}>
           <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Personal details</Text>
 
           <Text style={[styles.label, isDark && styles.darkText]}>Full name</Text>
@@ -239,9 +255,9 @@ export default function Settings() {
             onChangeText={(value) => updateField('bio', value)}
             style={[styles.input, styles.textArea, isDark && styles.inputDark]}
           />
-        </View>
+        </GlassCard>
 
-        <View style={[styles.section, isDark && styles.sectionDark]}>
+        <GlassCard style={[styles.section, isDark && styles.sectionDark]}>
           <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Notifications</Text>
 
           <Pressable style={styles.notificationHeader} onPress={() => setPushExpanded((expanded) => !expanded)} accessibilityRole="button">
@@ -258,28 +274,28 @@ export default function Settings() {
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Enable all notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive important updates and activity alerts</Text>
               </View>
-              <Switch value={pushNotifications} onValueChange={(value) => { setPushNotifications(value); setPushNewEvent(value); setPushCommunityReview(value); if (value) setMutePushNotifications(false); }} />
+              <SettingsSwitch value={pushNotifications} onValueChange={(value) => { setPushNotifications(value); setPushNewEvent(value); setPushCommunityReview(value); if (value) setMutePushNotifications(false); }} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Mute notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Temporarily silence push notifications</Text>
               </View>
-              <Switch value={mutePushNotifications} onValueChange={(value) => { setMutePushNotifications(value); if (value) setPushNotifications(false); }} />
+              <SettingsSwitch value={mutePushNotifications} onValueChange={(value) => { setMutePushNotifications(value); if (value) setPushNotifications(false); }} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New event</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Get notified about events near you</Text>
               </View>
-              <Switch value={pushNewEvent} onValueChange={setPushNewEvent} />
+              <SettingsSwitch value={pushNewEvent} onValueChange={setPushNewEvent} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New community review</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Get notified when places receive reviews</Text>
               </View>
-              <Switch value={pushCommunityReview} onValueChange={setPushCommunityReview} />
+              <SettingsSwitch value={pushCommunityReview} onValueChange={setPushCommunityReview} />
             </View>
           </View>}
 
@@ -297,33 +313,33 @@ export default function Settings() {
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Enable all notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive important updates by email</Text>
               </View>
-              <Switch value={emailNotifications} onValueChange={(value) => { setEmailNotifications(value); setEmailNewEvent(value); setEmailCommunityReview(value); if (value) setMuteEmailNotifications(false); }} />
+              <SettingsSwitch value={emailNotifications} onValueChange={(value) => { setEmailNotifications(value); setEmailNewEvent(value); setEmailCommunityReview(value); if (value) setMuteEmailNotifications(false); }} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Mute notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Temporarily silence email notifications</Text>
               </View>
-              <Switch value={muteEmailNotifications} onValueChange={(value) => { setMuteEmailNotifications(value); if (value) setEmailNotifications(false); }} />
+              <SettingsSwitch value={muteEmailNotifications} onValueChange={(value) => { setMuteEmailNotifications(value); if (value) setEmailNotifications(false); }} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New event</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive event updates by email</Text>
               </View>
-              <Switch value={emailNewEvent} onValueChange={setEmailNewEvent} />
+              <SettingsSwitch value={emailNewEvent} onValueChange={setEmailNewEvent} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New community review</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive review updates by email</Text>
               </View>
-              <Switch value={emailCommunityReview} onValueChange={setEmailCommunityReview} />
+              <SettingsSwitch value={emailCommunityReview} onValueChange={setEmailCommunityReview} />
             </View>
           </View>}
-        </View>
+        </GlassCard>
 
-        <View style={[styles.section, isDark && styles.sectionDark]}>
+        <GlassCard style={[styles.section, isDark && styles.sectionDark]}>
           <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Security</Text>
 
           <View style={styles.rowItem}>
@@ -331,7 +347,7 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Two-factor authentication</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Add an extra verification step</Text>
             </View>
-            <Switch value={twoFactorEnabled} onValueChange={setTwoFactorEnabled} />
+            <SettingsSwitch value={twoFactorEnabled} onValueChange={setTwoFactorEnabled} />
           </View>
 
           <View style={styles.rowItem}>
@@ -339,7 +355,7 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Login alerts</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Get notified about new sign-ins</Text>
             </View>
-            <Switch value={loginAlerts} onValueChange={setLoginAlerts} />
+            <SettingsSwitch value={loginAlerts} onValueChange={setLoginAlerts} />
           </View>
 
           <View style={styles.rowItem}>
@@ -347,7 +363,7 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Profile visibility</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Show your profile to other users</Text>
             </View>
-            <Switch value={profileVisible} onValueChange={setProfileVisible} />
+            <SettingsSwitch value={profileVisible} onValueChange={setProfileVisible} />
           </View>
 
           <View style={styles.rowItem}>
@@ -355,14 +371,7 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Location sharing</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>{shareLocation ? 'Live location is shared with route partners' : 'Share your live location when using route help'}</Text>
             </View>
-            <Switch
-              value={shareLocation}
-              onValueChange={(value) => {
-                setLocationSharing(value);
-              }}
-              trackColor={{ false: '#D9D2F4', true: '#A855F7' }}
-              thumbColor="#fff"
-            />
+            <SettingsSwitch value={shareLocation} onValueChange={setLocationSharing} />
           </View>
 
           <View style={styles.verificationRow}>
@@ -372,36 +381,42 @@ export default function Settings() {
                 {selfieVerified ? 'Verified for this session' : 'Verify your identity with a quick selfie'}
               </Text>
             </View>
-            <Button
-              label={selfieVerified ? 'Verified' : 'Verify'}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={selfieVerified ? 'Selfie verified' : 'Verify identity with selfie'}
               onPress={handleSelfieVerification}
-              variant={selfieVerified ? 'secondary' : 'purple'}
-              style={styles.verifyButton}
-            />
+              style={[styles.verifyIconButton, selfieVerified && styles.verifyIconButtonDone]}
+            >
+              <Ionicons
+                name="camera-outline"
+                size={22}
+                color={selfieVerified ? colors.success : '#FFFFFF'}
+              />
+            </Pressable>
           </View>
 
-          <Pressable style={styles.linkRow} onPress={() => router.push('/change-password' as never)}>
+          <Pressable style={styles.linkRow} onPress={() => router.push(routes.changePassword)}>
             <Text style={[styles.linkText, isDark && styles.darkText]}>Change password</Text>
             <Text style={styles.arrow}>›</Text>
           </Pressable>
-          <Pressable style={styles.linkRow} onPress={() => router.push('/manage-sessions' as never)}>
+          <Pressable style={styles.linkRow} onPress={() => router.push(routes.manageSessions)}>
             <Text style={[styles.linkText, isDark && styles.darkText]}>Manage active sessions</Text>
             <Text style={styles.arrow}>›</Text>
           </Pressable>
-          <Pressable style={styles.linkRow} onPress={() => router.push('/privacy-settings' as never)}>
+          <Pressable style={styles.linkRow} onPress={() => router.push(routes.privacySettings)}>
             <Text style={[styles.linkText, isDark && styles.darkText]}>Privacy settings</Text>
             <Text style={styles.arrow}>›</Text>
           </Pressable>
-        </View>
+        </GlassCard>
 
-        <View style={[styles.section, styles.accountSection, isDark && styles.sectionDark]}>
+        <GlassCard style={[styles.section, styles.accountSection, isDark && styles.sectionDark]}>
           <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Account actions</Text>
           <Button label="Save changes" onPress={() => {}} style={styles.accountButton} />
           <View style={styles.actionSpacer} />
           <Button label="Log out" onPress={handleLogout} variant="purple" style={styles.accountButton} />
           <View style={styles.actionSpacer} />
           <Button label="Deactivate Account" onPress={handleDeactivate} variant="danger" style={styles.accountButton} />
-        </View>
+        </GlassCard>
       </ScrollView>
 
       <Modal
@@ -443,7 +458,7 @@ export default function Settings() {
               value={deactivationPassword}
               onChangeText={setDeactivationPassword}
               placeholder="Password"
-              placeholderTextColor={isDark ? '#A895C0' : colors.muted}
+              placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               secureTextEntry
               autoFocus
               style={[styles.input, isDark && styles.inputDark]}
@@ -460,10 +475,10 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', padding: 20, paddingBottom: 120 },
   back: { color: colors.primary, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   title: { color: colors.textPrimary, fontSize: 28, fontWeight: '600', marginBottom: 18 },
@@ -482,19 +497,15 @@ const styles = StyleSheet.create({
   uploadPhotoButton: { minHeight: 48, paddingHorizontal: 18, borderRadius: 30, backgroundColor: '#FF8C00', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   uploadPhotoText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   section: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 22,
     padding: 16,
     marginBottom: 18,
   },
-  sectionDark: { backgroundColor: '#161224', borderColor: '#3B2B55' },
+  sectionDark: {},
   accountSection: { alignItems: 'stretch' },
   sectionTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   label: { color: colors.textPrimary, fontWeight: '600', fontSize: 12, marginBottom: 8, marginTop: 8 },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
@@ -503,7 +514,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textPrimary,
   },
-  inputDark: { backgroundColor: '#110D1D', borderColor: '#3B2B55', color: '#F8FAFC' },
+  inputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
   textArea: { minHeight: 92, textAlignVertical: 'top' },
   rowItem: {
     flexDirection: 'row',
@@ -517,13 +528,40 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowLabel: { color: colors.textPrimary, fontWeight: '600', fontSize: 14 },
   rowSub: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
+  toggle: {
+    width: 34,
+    height: 20,
+    borderRadius: 10,
+    padding: 2,
+    justifyContent: 'center',
+    backgroundColor: '#D9D2F4',
+  },
+  toggleActive: { backgroundColor: '#fffe13' },
+  toggleThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+  },
+  toggleThumbActive: {
+    backgroundColor: '#ff9900',
+    alignSelf: 'flex-end',
+  },
   notificationHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   emailGroupHeader: { marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border },
   notificationGroupTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '700', marginTop: 2 },
   notificationGroupSub: { color: colors.textSecondary, fontSize: 12, marginTop: 4, marginBottom: 2 },
   notificationChevron: { color: colors.primary, fontSize: 24, lineHeight: 24, paddingHorizontal: 4 },
   verificationRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  verifyButton: { minHeight: 40, paddingHorizontal: 14 },
+  verifyIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059f2d',
+  },
+  verifyIconButtonDone: { backgroundColor: '#DDF8EE' },
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -537,8 +575,8 @@ const styles = StyleSheet.create({
   actionSpacer: { height: 10 },
   accountButton: { width: '100%', alignSelf: 'stretch' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(10, 7, 18, 0.65)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  passwordModal: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 22, padding: 20, borderWidth: 1, borderColor: colors.border },
-  verificationModal: { width: '100%', maxWidth: 360, backgroundColor: '#FFFFFF', borderRadius: 22, padding: 24, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  passwordModal: { width: '100%', maxWidth: 420, backgroundColor: 'rgba(255, 255, 255, 0.78)', borderRadius: 22, padding: 20, borderWidth: 1, borderColor: colors.border },
+  verificationModal: { width: '100%', maxWidth: 360, backgroundColor: 'rgba(255, 255, 255, 0.78)', borderRadius: 22, padding: 24, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   modalTitle: { color: colors.textPrimary, fontSize: 20, fontWeight: '700' },
   verificationTitle: { marginTop: 14, textAlign: 'center' },
   modalCopy: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 8, marginBottom: 14 },

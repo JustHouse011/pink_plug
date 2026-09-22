@@ -117,3 +117,14 @@ export interface User {
   savedPlaces: Place[];
   verificationStatus: 'verified' | 'pending' | 'unverified';
 }
+
+export interface DirectoryResource {
+  id: string;
+  name: string;
+  category: string;
+  city: string;
+  area: string;
+  description: string;
+  detail: string;
+  badge: string;
+}

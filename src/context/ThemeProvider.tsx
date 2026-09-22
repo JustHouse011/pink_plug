@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { Appearance, Platform } from 'react-native';
+import { colors, darkColors } from '@/constants/colors';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 
@@ -8,20 +9,25 @@ type ThemeContextValue = {
   setTheme: (theme: ThemePreference) => void;
   toggleTheme: () => void;
   isDark: boolean;
+  palette: typeof colors | typeof darkColors;
 };
 
 const STORAGE_KEY = 'pink-route-theme';
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getStoredTheme(): ThemePreference {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'system';
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'dark';
 
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
   } catch {
-    return 'system';
+    return 'dark';
   }
+}
+
+function getDefaultTheme(): ThemePreference {
+  return 'dark';
 }
 
 function getSystemIsDark() {
@@ -33,9 +39,10 @@ function getSystemIsDark() {
 }
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [theme, setThemeState] = useState<ThemePreference>(getStoredTheme);
+  const [theme, setThemeState] = useState<ThemePreference>(getDefaultTheme);
   const [systemIsDark, setSystemIsDark] = useState(getSystemIsDark);
   const isDark = theme === 'dark' || (theme === 'system' && systemIsDark);
+  const palette = isDark ? darkColors : colors;
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -73,7 +80,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setTheme: setThemeState,
     toggleTheme: () => setThemeState((current) => (current === 'dark' ? 'light' : 'dark')),
     isDark,
-  }), [isDark, theme]);
+    palette,
+  }), [isDark, palette, theme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

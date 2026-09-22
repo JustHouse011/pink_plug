@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -10,12 +9,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeProvider';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { useAppStore } from '@/store/useAppStore';
 
 const interestOptions = ['Community', 'Travel', 'Nightlife', 'Wellness', 'Events', 'Food', 'Music', 'Outdoor'];
@@ -89,7 +89,7 @@ export default function ProfileSetup() {
 
   const previousStep = () => {
     if (currentStep === 0) {
-      router.back();
+      router.canGoBack() ? router.back() : router.replace('/');
       return;
     }
 
@@ -98,7 +98,7 @@ export default function ProfileSetup() {
 
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
-      <LinearGradient colors={isDark ? ['#0A0712', '#120C1E', '#0A0712'] : ['#F5F0FF', '#F8F3FF', '#F1E8FF']} style={styles.gradient}>
+      <LinearGradient colors={['transparent', 'transparent', 'transparent']} style={styles.gradient}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Pressable onPress={previousStep} style={styles.backButton}>
             <Text style={styles.backText}>← Back</Text>
@@ -266,8 +266,8 @@ export default function ProfileSetup() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' }, darkText: { color: '#F8FAFC' }, darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' }, darkText: { color: darkColors.textPrimary }, darkSecondaryText: { color: darkColors.textSecondary },
   gradient: { flex: 1 },
   content: {
     flexGrow: 1,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  cardDark: { backgroundColor: '#161224', borderColor: '#3B2B55' },
+  cardDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border },
   label: {
     color: colors.textPrimary,
     fontSize: 15,
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: 8,
   },
-  inputDark: { backgroundColor: '#110D1D', borderColor: '#3B2B55', color: '#F8FAFC' },
+  inputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
   interestGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#F7F1FF',
+    backgroundColor: colors.secondary,
     marginTop: 12,
   },
   secondaryText: {

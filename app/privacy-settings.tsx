@@ -1,7 +1,8 @@
-﻿import { Pressable, SafeAreaView, ScrollView, Text, View, StyleSheet, Switch } from 'react-native';
+﻿import { Pressable, ScrollView, Text, View, StyleSheet, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { colors } from '@/constants/colors';
+import { colors, darkColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeProvider';
 
 export default function PrivacySettings() {
@@ -15,7 +16,7 @@ export default function PrivacySettings() {
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
           <Text style={styles.back}>{'‹'}  Back</Text>
         </Pressable>
 
@@ -60,8 +61,8 @@ export default function PrivacySettings() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  safeDark: { backgroundColor: '#0A0712' }, darkText: { color: '#F8FAFC' }, darkSecondaryText: { color: '#C4B5D9' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  safeDark: { backgroundColor: 'transparent' }, darkText: { color: darkColors.textPrimary }, darkSecondaryText: { color: darkColors.textSecondary },
   content: { padding: 20, paddingBottom: 120 },
   back: { color: colors.primary, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   title: { color: colors.textPrimary, fontSize: 28, fontWeight: '600', marginBottom: 16 },
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 16,
   },
-  cardDark: { backgroundColor: '#161224', borderColor: '#3B2B55' },
+  cardDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',

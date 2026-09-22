@@ -1,6 +1,11 @@
+import { memo } from 'react';
 import { Pressable, Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { colors } from '@/constants/colors';
+import GlassCard from '@/components/ui/GlassCard';
+import { colors, darkColors } from '@/constants/colors';
+import { radius } from '@/constants/radius';
+import { spacing } from '@/constants/spacing';
+import { typography } from '@/constants/typography';
 import type { Place } from '@/types';
 import { useTheme } from '@/context/ThemeProvider';
 
@@ -12,73 +17,77 @@ interface NearbyCardProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export default function NearbyCard({ place, saved, onPress, onToggleSave, style }: NearbyCardProps) {
+function NearbyCard({ place, saved, onPress, onToggleSave, style }: NearbyCardProps) {
   const { isDark } = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${place.name}`}
-      onPress={onPress}
-      style={[styles.card, isDark && styles.cardDark, style]}
-    >
+    <GlassCard level="standard" gradientBorder="subtle" style={[styles.card, style]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${place.name}`}
+        onPress={onPress}
+        style={styles.pressable}
+      >
       <View>
         <Image source={{ uri: place.imageUrl }} style={styles.image} contentFit="cover" />
         <Pressable
           accessibilityLabel={saved ? 'Remove saved place' : 'Save place'}
           onPress={onToggleSave}
-          style={styles.heart}
+          style={[styles.heart, isDark && styles.heartDark]}
         >
           <Text>{saved ? '♥' : '♡'}</Text>
         </Pressable>
-        <Text style={styles.category}>✦ {place.category}</Text>
+        <Text style={[styles.category, isDark && styles.categoryDark]}>✦ {place.category}</Text>
       </View>
       <View style={styles.body}>
         <Text numberOfLines={1} style={[styles.name, isDark && styles.darkText]}>{place.name}</Text>
-        <Text style={[styles.meta, isDark && styles.darkSecondaryText]}>★ {place.rating}  ({place.reviewCount})  ·  {place.distance}</Text>
-        <Text style={styles.badge}>✓ {place.verifications[0].replace('_', ' ')}</Text>
+        <Text numberOfLines={1} style={[styles.meta, isDark && styles.darkSecondaryText]}>★ {place.rating}  ({place.reviewCount})  ·  {place.distance}</Text>
+        <Text numberOfLines={1} style={styles.badge}>✓ {place.verifications[0].replace('_', ' ')}</Text>
       </View>
-    </Pressable>
+      </Pressable>
+    </GlassCard>
   );
 }
 
+export default memo(NearbyCard);
+
 const styles = StyleSheet.create({
   card: {
-    width: 210,
-    borderRadius: 22,
-    backgroundColor: colors.surface,
+    width: '100%',
+    padding: 0,
+    borderRadius: radius.xl,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  cardDark: { borderColor: '#334155', backgroundColor: '#161224' },
-  darkText: { color: '#F8FAFC' },
-  darkSecondaryText: { color: '#C4B5D9' },
+  pressable: { flex: 1, overflow: 'hidden' },
+  darkText: { color: darkColors.textPrimary },
+  darkSecondaryText: { color: darkColors.textSecondary },
   image: { width: '100%', height: 112 },
   heart: {
     position: 'absolute',
-    right: 10,
-    top: 10,
+    right: spacing.sm,
+    top: spacing.sm,
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.86)',
   },
+  heartDark: { backgroundColor: darkColors.softSurface },
   category: {
     position: 'absolute',
-    left: 10,
-    bottom: 10,
+    left: spacing.sm,
+    bottom: spacing.sm,
     color: colors.textPrimary,
     backgroundColor: 'rgba(255,255,255,0.86)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    fontSize: 10,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.xs,
+    fontSize: typography.caption.fontSize,
     textTransform: 'capitalize',
   },
-  body: { padding: 12 },
-  name: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
-  meta: { color: colors.warning, fontSize: 11, marginTop: 5 },
-  badge: { color: colors.primary, fontSize: 10, fontWeight: '600', marginTop: 8, textTransform: 'capitalize' },
+  categoryDark: { color: darkColors.textPrimary, backgroundColor: darkColors.softSurface },
+  body: { padding: spacing.sm },
+  name: { color: colors.textPrimary, fontSize: typography.cardTitle.fontSize, lineHeight: typography.cardTitle.lineHeight, fontWeight: typography.cardTitle.fontWeight },
+  meta: { color: colors.warning, fontSize: typography.caption.fontSize, marginTop: spacing.xxs },
+  badge: { color: colors.primary, fontSize: typography.caption.fontSize, fontWeight: typography.caption.fontWeight, marginTop: spacing.xs, textTransform: 'capitalize' },
 });

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { Children } from 'react';
+import AnimatedCard from './AnimatedCard';
 
 type AnimatedListProps = {
   children: ReactNode;
@@ -7,5 +8,13 @@ type AnimatedListProps = {
 };
 
 export default function AnimatedList({ children }: AnimatedListProps) {
-  return <View>{children}</View>;
+  return (
+    <>
+      {Children.map(children, (child, index) => (
+        <AnimatedCard key={index} index={index}>
+          {child}
+        </AnimatedCard>
+      ))}
+    </>
+  );
 }
