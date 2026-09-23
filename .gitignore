@@ -5,6 +5,19 @@ dist/
 build/
 .cache/
 .env*
+!/.env.example
+coverage/
+.DS_Store
+Thumbs.db
+
+# Local signing credentials (never application source)
+*.jks
+*.keystore
+*.p12
+*.p8
+*.mobileprovision
+*.key
+/credentials.json
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo
