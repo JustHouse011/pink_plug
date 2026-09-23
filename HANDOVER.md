@@ -90,7 +90,7 @@ Replace these flows before production. Engineers must choose the identity provid
 
 ## API / Backend Integration
 
-Use [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) as the frontend-derived API handover specification. It defines proposed contracts, current-flow versus planned scope, model fields, security requirements, and open engineering decisions. It does not claim any backend endpoint is deployed. The original [docs/API_REQUIREMENTS_DRAFT.md](docs/API_REQUIREMENTS_DRAFT.md) remains unchanged; the specification includes a reconciliation of its requirements.
+Use [docs/API-SPECIFICATION.md](docs/API-SPECIFICATION.md) as the frontend-derived API handover specification. It defines proposed contracts, current-flow versus planned scope, model fields, security requirements, and open engineering decisions. It does not claim any backend endpoint is deployed. The original draft is available in Git history at cdb1607; its later working-tree deletion was made outside this cleanup. The specification includes a reconciliation of its requirements.
 
 Areas requiring backend integration include identity/OTP, profiles, places/events/directory content, community actions, reviews, session management, privacy/security controls, and verified contact/safety workflows. `src/data/` holds bundled/mock content. Stores persist selected state locally; review state and contacts are not a shared production database. React Query provider setup does not imply an implemented API client.
 
@@ -138,7 +138,7 @@ These are non-secret identifiers. Actual Expo membership, Apple/Google ownership
 
 Updates are enabled with automatic launch checking set to `NEVER`; application code manually checks, fetches, and reloads outside development mode. The EAS endpoint uses the project ID above. Remote channel/branch mappings and available releases were not inspected. Agree preview/production isolation and runtime-version discipline before publishing updates.
 
-See [README.md](README.md#builds) for profile commands. No cloud build, OTA publication, or signing operation was performed in this audit.
+See [README.md](README.md#build-commands) for profile commands. No cloud build, OTA publication, or signing operation was performed in this audit.
 
 ## Known Issues / Outstanding Work
 
@@ -215,7 +215,7 @@ The authoritative Figma file, design owner, permissions, and continued use of Fi
 - The earlier cleanup staged four `.expo` and six `.idea` removals, preserving local metadata. Neither directory has tracked files in the current index.
 - Existing documentation/asset deletions and application edits predate this documentation task; they were not discarded or restored.
 
-The audit retained ignored `.tmp-handover-export/` and `.tmp-handover-introspect.json` plus generated caches. Documentation preparation adds `README.md`, `HANDOVER.md`, and `docs/API_DOCUMENTATION.md`; no application files are modified or staged.
+The audit retained ignored `.tmp-handover-export/` and `.tmp-handover-introspect.json` plus generated caches. Documentation preparation adds `README.md`, `HANDOVER.md`, and `docs/API-SPECIFICATION.md`; no application files are modified or staged.
 
 ## Engineering Ownership
 
@@ -229,3 +229,9 @@ Assign owners and record decisions for:
 - **Operations:** environment contract, secret management, CI, external map/image services, and LFS availability.
 
 Named engineering owners, production API endpoints, environment values, signing credentials, store readiness, and remote EAS channel mappings were not established from repository evidence. They must be supplied by the responsible team rather than inferred or silently chosen.
+
+## 23 September handover package addendum
+
+The earlier audit above is historical. Its previously untracked application changes are now committed in the current repository. The subsequent cleanup preserved source/configuration/dependencies and removed the old ignored export directories and validation log/introspection output. The API contract is now at docs/API-SPECIFICATION.md because the former file was already deleted in the working tree; links use the new canonical path. The sanitized .env.example is now explicitly allowed by .gitignore and contains comments only.
+
+Use [current report](docs/HANDOVER-REPORT.md), [frontend handover](docs/FRONTEND-HANDOVER.md), [known issues](docs/KNOWN-ISSUES.md), and [acceptance checklist](docs/HANDOVER-CHECKLIST.md) for current cleanup/validation state. Historical references to remaining audit output, untracked source or the previous template policy do not describe the new state.

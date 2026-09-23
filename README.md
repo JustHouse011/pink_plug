@@ -4,7 +4,7 @@
 
 The Pink Plug is a mobile-first application for LGBTQIA+ community discovery, events, places, travel planning, and safety resources, with a web implementation. The repository contains an Expo frontend with local state and mock data. Authentication and backend-dependent features are prototypes, not production services.
 
-Read [HANDOVER.md](HANDOVER.md) for release blockers, validation evidence, and engineering decisions. The [API specification](docs/API_DOCUMENTATION.md) defines the proposed frontend/backend handover contract, including conditional scope and unresolved decisions; it does not describe deployed APIs. The [original API requirements draft](docs/API_REQUIREMENTS_DRAFT.md) is retained for reference.
+Read [HANDOVER.md](HANDOVER.md) for release blockers, validation evidence, and engineering decisions. The [API specification](docs/API-SPECIFICATION.md) defines the proposed frontend/backend handover contract, including conditional scope and unresolved decisions; it does not describe deployed APIs. The original API draft remains available in Git history at cdb1607; the working-tree deletion was made outside this cleanup.
 
 ## Technology Stack
 
@@ -29,7 +29,7 @@ Versions below are declared in `package.json`; resolved versions are recorded in
 
 `react-native-maps` is installed but is not the map implementation currently used by the inspected source.
 
-## Prerequisites
+## Requirements
 
 - Node.js: `.mise.toml` selects major version **22**. The installed React Native package requires `^20.19.4 || ^22.13.0 || ^24.3.0 || >=25.0.0`; use at least **22.13.0** on the configured Node 22 line. The handover audit ran with Node **24.14.1**; Node 22 was not separately tested.
 - npm: required for the commands below. The project does not pin an npm version or declare a `packageManager`; the audit environment used **11.11.0**. Preserve the npm lockfile. `.mise.toml` also lists pnpm **10.34.3** for the retained Figma workflow; do not create a competing lockfile without team agreement.
@@ -52,7 +52,7 @@ npm start
 
 For an unchanged lockfile in CI or a reproducible clean installation, use `npm ci` instead of `npm install`. Do not run installation concurrently with a running dependency update. Review any lockfile changes before including them in a handover.
 
-## Development
+## Running Locally
 
 These are the actual scripts in `package.json`:
 
@@ -79,7 +79,7 @@ The configuration extends `expo/tsconfig.base`, enables strict checking, and map
 
 No lint script or linter configuration is present. oxfmt checks formatting, not semantic lint rules. No automated test suite was found during the handover audit.
 
-## Project Structure
+## Folder Structure
 
 ```text
 app/                       Expo Router routes and layouts
@@ -109,13 +109,13 @@ tsconfig.json             TypeScript configuration
 
 There is **no top-level `assets/` directory** in the audited tree; assets live primarily in `src/imports/`. There are no checked-in `ios/` or `android/` projects. Generated exports, caches, and installed dependencies are not application source.
 
-## Environment Variables
+## Environment Setup
 
 No project `.env` files or required backend environment-variable contract were identified in the audit. Do not invent backend URLs or credentials to run the current mock frontend.
 
 When backend integration is designed, document required variable names, owners, and environment-specific values. Client-visible `EXPO_PUBLIC_*` values are embedded in the application and must not contain secrets. Keep server credentials out of client code and use the agreed secure build/backend environment configuration.
 
-The current `.env*` ignore rule excludes local environment files **and example files**. A sanitized `.env.example` is recommended only after the contract is defined; explicitly approve an ignore exception at that time. No example file or ignore change is included in this documentation handover.
+The `.env*` rule excludes local environment files; `!/.env.example` permits the sanitized root template. The template is comment-only because the application currently reads no environment variables. See [environment setup](docs/ENVIRONMENT.md).
 
 ## Expo / EAS
 
@@ -141,7 +141,7 @@ These identifiers are project metadata, not credentials. Account access and sign
 
 The production channel assignment is the actual configuration, not a recommendation. Review release separation before publishing. `submit.production` exists but has no explicit settings. No `.easignore` exists, so EAS uses `.gitignore` for upload exclusions.
 
-## Running Android
+## Android Development
 
 ```sh
 npm run android
@@ -149,7 +149,7 @@ npm run android
 
 This starts Metro and requests Android launch; it does not compile an APK. An appropriate device/emulator client must be available. The configured development-client workflow is incomplete because `expo-dev-client` is not declared. Engineers must resolve that before relying on the `development` build profile. Expo Go compatibility and device behavior were not established by the export audit.
 
-## Running iOS
+## iOS Development
 
 ```sh
 npm run ios
@@ -157,7 +157,7 @@ npm run ios
 
 Simulator launch requires macOS and Xcode; Windows cannot run the iOS simulator. A physical iPhone can use a compatible installed client with the development server, subject to network and client compatibility. Before native builds, define `ios.bundleIdentifier`, signing ownership, and distribution access. The development-client gap described above also applies to iOS.
 
-## Builds
+## Build Commands
 
 These commands use the existing profiles and submit actual cloud build requests; they were **not run** during the handover audit:
 
@@ -193,7 +193,7 @@ npx expo install --check
 
 The compatibility check currently flags `react-native-svg` 15.15.5 versus Expo's expected 15.15.4. See [HANDOVER.md](HANDOVER.md).
 
-## OTA Updates
+## Update Commands
 
 `expo-updates` is configured for the EAS project above. Automatic launch checking is set to `NEVER`, with a zero cache fallback timeout. However, `app/_layout.tsx` manually checks, fetches, and reloads available updates outside development mode. OTA updates are therefore not disabled.
 
@@ -208,4 +208,50 @@ Native dependency or configuration changes require a compatible new native build
 - Keep `.vscode/extensions.json` as the current shared editor recommendation.
 - Retain `.figma/` until engineering/design decide whether Figma Make remains supported.
 - Do not introduce `/ios/` or `/android/` ignore rules without agreeing the native-project policy.
-- Before preparing a handover commit, review staged and unstaged changes separately. At audit time, required `src/layout/tabLayout.ts` was untracked and several files had additional unstaged edits. The validated working tree is not identical to the staged snapshot.
+- Review staged and unstaged changes separately before your handover commit. The earlier source changes, including `src/layout/tabLayout.ts`, are now in the current commit. This cleanup leaves documentation and ignore changes for your review; it does not stage them.
+
+## Project Architecture
+
+Expo Router app/ routes compose src/components; src/constants and theme context supply styling. Zustand/AsyncStorage hold local domain state; React Query is provider infrastructure awaiting an API client. Device contacts/sharing are real integrations, while OTP and domain data are mocked. Native/web maps and motion have platform-specific implementations. See [frontend handover](docs/FRONTEND-HANDOVER.md).
+
+## Backend Integration
+
+Start with [API specification](docs/API-SPECIFICATION.md), [screen/API mapping](docs/SCREEN-API-MAPPING.md), [data models](docs/DATA-MODELS.md) and [authentication](docs/AUTHENTICATION.md). The specification retains 71 proposed contracts and explicit conditional scope; it does not describe deployed services. Replace mocks deliberately with loading/error/authorization handling, preserving current UI.
+
+## API Configuration
+
+There is no implemented base URL or API client. The proposal's EXPO_PUBLIC_API_BASE_URL requires an engineering decision and code integration before use. Do not add guessed API keys. See [environment configuration](docs/ENVIRONMENT.md).
+
+## Troubleshooting
+
+- Missing binary assets: install Git LFS and fetch objects; pointer files are not images.
+- Missing typed routes on a fresh clone: start Expo to generate ignored .expo/types, then typecheck.
+- Metro cache trouble: use `npx expo start --clear`; avoid deleting source or native configuration.
+- Dependency check failure: current SVG mismatch is recorded in known issues; do not upgrade everything automatically.
+- iOS launch/build: simulator needs macOS/Xcode; native identity/signing and development client still need setup.
+- No data changes across devices: the frontend uses local mocks, not a connected backend.
+
+## Documentation
+
+| Document | Purpose |
+| --- | --- |
+| [Frontend handover](docs/FRONTEND-HANDOVER.md) | Architecture, state, platform differences and integration sequence |
+| [API specification](docs/API-SPECIFICATION.md) | Canonical proposed endpoint contracts and decisions |
+| [Screen/API mapping](docs/SCREEN-API-MAPPING.md) | Every significant screen/feature and mock replacement |
+| [Data models](docs/DATA-MODELS.md) | Field-definition index, relationships and frontend usage |
+| [Authentication](docs/AUTHENTICATION.md) | Existing prototype versus required service |
+| [Media uploads](docs/MEDIA-UPLOADS.md) | Picker behavior and proposed private upload lifecycle |
+| [Error handling](docs/ERROR-HANDLING.md) | Responses, failures, retries and loading states |
+| [Environment](docs/ENVIRONMENT.md) | Current empty contract and safe future configuration |
+| [Expo/EAS](docs/EXPO-EAS.md) | Builds, runtime, channels and updates |
+| [Codebase audit](docs/CODEBASE-AUDIT.md) | Keep/remove/review classifications |
+| [Security audit](docs/SECURITY-AUDIT.md) | Static findings and scope limitations |
+| [Known issues](docs/KNOWN-ISSUES.md) | Backend, release and QA gaps |
+| [Handover checklist](docs/HANDOVER-CHECKLIST.md) | Verified versus pending acceptance |
+| [Handover report](docs/HANDOVER-REPORT.md) | Exact cleanup and validation results |
+| [Original handover](HANDOVER.md) | Historical full repository audit and release gates |
+| Original API draft (Git history: cdb1607) | Historical requirements, reconciled in API specification section 10 |
+
+## Handover Notes
+
+The repository is prepared for engineering continuation with explicit mock and release limitations. This is not production certification. Review the report, resolve/accept the listed manual decisions, and review the complete diff before your own commit/push. No cloud build, update or publication is performed by cleanup.

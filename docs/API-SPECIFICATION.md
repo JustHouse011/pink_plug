@@ -3,7 +3,9 @@
 Version: 1.0  
 Status: Engineering Handover  
 API style: REST/JSON (proposed; no application backend exists in this repository)  
-Evidence baseline: current working tree, 22 September 2026
+Evidence baseline: frontend reviewed 22-23 September 2026
+
+Canonical location: `docs/API-SPECIFICATION.md`; replaces the former API_DOCUMENTATION.md path. The previous file was already deleted in the working tree when this handover package was prepared.
 
 ## 1. Contract status and scope
 
@@ -43,7 +45,7 @@ Important corrections to the draft:
 - Notification preferences exist, but `expo-notifications`, push registration, and delivery code do not.
 - No post/report/block menu behavior exists behind the community ellipsis icon.
 - Profile “Groups” and “Activity” are placeholders; displayed route/review/following counts are hard-coded.
-- Existing draft remains untouched at [API_REQUIREMENTS_DRAFT.md](API_REQUIREMENTS_DRAFT.md). Section 10 reconciles its retained requirements.
+- Original draft is preserved in Git history at cdb1607 (`git show cdb1607:docs/API_REQUIREMENTS_DRAFT.md`). Its working-tree deletion occurred outside this cleanup. Section 10 reconciles its retained requirements.
 
 ## 2. API conventions
 
@@ -4577,7 +4579,7 @@ These are proposed production requirements, not evidence of completed controls:
 
 ## 10. Draft reconciliation and conditional scope
 
-The draft is preserved. Its CONFIRMED labels meant observed intent, not deployed APIs. The following retained decisions avoid silently dropping legitimate requirements or promising unsupported features.
+The draft is preserved in Git history. Its CONFIRMED labels meant observed intent, not deployed APIs. The following retained decisions avoid silently dropping legitimate requirements or promising unsupported features.
 
 | Draft requirement | Final disposition |
 | --- | --- |
