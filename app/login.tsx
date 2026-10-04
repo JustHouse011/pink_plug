@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
+import Logo from '@/imports/ICON.svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, darkColors } from '@/constants/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import { useAppStore } from '@/store/useAppStore';
-import { mockOtpService } from '@/services/mockOtpService';
+import * as authService from '@/services/authService';
+import { ApiError, ApiNetworkError } from '@/services/api';
 import { useTheme } from '@/context/ThemeProvider';
 import { routes } from '@/navigation/routes';
 
@@ -32,14 +33,14 @@ export default function Login() {
   const login = useAppStore((state) => state.login);
   const setLoggingOut = useAppStore((state) => state.setLoggingOut);
   const [step, setStep] = useState<AuthStep>('email');
-  const [email, setEmail] = useState('bongani.nombamba@email.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [mockOtpCode, setMockOtpCode] = useState('');
+  const [challengeId, setChallengeId] = useState('');
+  const [maskedDestination, setMaskedDestination] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<OptionalMethod>('email');
-  const [biometricChecking, setBiometricChecking] = useState(false);
   const palette = isDark
     ? {
         background: darkColors.background,
@@ -63,20 +64,13 @@ export default function Login() {
       };
 
   const showOptionalLoginAlert = (method: 'Gmail' | 'Apple' | 'Biometric') => {
-    Alert.alert(
-      `${method} login`,
-      `Simulating ${method} authentication. You are now signing in...`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          onPress: () => {
-            login();
-            router.replace('/(tabs)/home');
-          },
-        },
-      ],
-    );
+    Alert.alert(`${method} sign-in isn't available yet`, 'Please sign in with your email and password for now.');
+  };
+
+  const describeError = (error: unknown): string => {
+    if (error instanceof ApiError) return error.message;
+    if (error instanceof ApiNetworkError) return error.message;
+    return 'Something went wrong. Please try again.';
   };
 
   const handleEmailLogin = async () => {
@@ -93,41 +87,50 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const result = await mockOtpService.sendOtp(trimmed);
-      setOtpSent(true);
-      setMockOtpCode(result.otp);
+      const challenge = await authService.login(trimmed, password);
+      setChallengeId(challenge.challengeId);
+      setMaskedDestination(challenge.maskedDestination);
       setSelectedMethod('email');
+      setOtp('');
       setStep('otp');
-      Alert.alert('Verification code sent', `${result.message} OTP: ${result.otp}`);
-    } catch {
-      Alert.alert('Unable to send code', 'Please try again.');
+    } catch (error) {
+      Alert.alert('Unable to sign in', describeError(error));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOtp = () => {
-    const isSixDigitOtp = /^\d{6}$/.test(otp.trim());
-    const isValidOtp = mockOtpService.verifyOtp(otp) || (isSixDigitOtp && mockOtpCode.length > 0);
-
-    if (!isValidOtp) {
+  const handleVerifyOtp = async () => {
+    if (!/^\d{6}$/.test(otp.trim())) {
       Alert.alert('Invalid OTP', 'Please check the code and try again.');
       return;
     }
 
-    login();
-    router.replace('/(tabs)/home');
+    setVerifying(true);
+    try {
+      const { user, session } = await authService.verifyOtp(challengeId, otp.trim());
+      login(user, session);
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      Alert.alert('Unable to verify code', describeError(error));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      const challenge = await authService.resendOtp(challengeId);
+      setMaskedDestination(challenge.maskedDestination);
+      Alert.alert('Code resent', `We sent a new code to ${challenge.maskedDestination}.`);
+    } catch (error) {
+      Alert.alert('Unable to resend code', describeError(error));
+    }
   };
 
   const handleBiometricLogin = () => {
     setSelectedMethod('biometric');
-    setBiometricChecking(true);
-
-    setTimeout(() => {
-      setBiometricChecking(false);
-      login();
-      router.replace('/(tabs)/home');
-    }, 1800);
+    Alert.alert("Face ID / fingerprint isn't available yet", 'Please sign in with your email and password for now.');
   };
 
   const handleBack = () => {
@@ -156,7 +159,7 @@ export default function Login() {
           </Pressable>
 
           <View style={styles.logoWrap}>
-            <Image source={require('@/imports/ICON.svg')} style={styles.logo} contentFit="contain" />
+            <Logo width={styles.logo.width} height={styles.logo.height} />
           </View>
 
           <Text accessibilityRole="header" style={[styles.title, { color: palette.text }]}>Hello!!</Text>
@@ -247,11 +250,8 @@ export default function Login() {
             <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>OTP verification</Text>
               <Text style={[styles.helperText, { color: palette.secondaryText }]}>
-                Enter the 6-digit code sent to {email}
+                Enter the 6-digit code sent to {maskedDestination || email}
               </Text>
-              {mockOtpCode ? (
-                <Text style={styles.demoOtp}>Demo code: {mockOtpCode}</Text>
-              ) : null}
               <TextInput
                 value={otp}
                 onChangeText={setOtp}
@@ -262,22 +262,19 @@ export default function Login() {
                 style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.text }]}
               />
 
-              <Pressable onPress={handleVerifyOtp} style={styles.primaryButton}>
+              <Pressable onPress={handleVerifyOtp} style={styles.primaryButton} disabled={verifying}>
                 <LinearGradient
                   colors={[colors.primary, '#C432D9']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.buttonGradient}
                 >
-                  <Text style={styles.primaryText}>Verify & continue</Text>
+                  <Text style={styles.primaryText}>{verifying ? 'Verifying...' : 'Verify & continue'}</Text>
                 </LinearGradient>
               </Pressable>
 
               <View style={styles.secondaryRow}>
-                <Pressable onPress={() => {
-                  setOtp('');
-                  handleEmailLogin();
-                }}>
+                <Pressable onPress={handleResendOtp}>
                   <Text style={styles.linkText}>Resend code</Text>
                 </Pressable>
                 <Pressable onPress={() => setStep('email')}>
@@ -287,21 +284,8 @@ export default function Login() {
             </GlassCard>
           )}
 
-          {!otpSent && (
+          {step === 'email' && (
             <Text style={styles.footNote}>Secure sign in using your trusted email account.</Text>
-          )}
-
-          {biometricChecking && (
-            <View style={styles.biometricOverlay} pointerEvents="none">
-                <GlassCard intensity={35} style={[styles.biometricSheet, { borderColor: palette.border }]}> 
-                <View style={styles.biometricIconWrap}>
-                  <Ionicons name="finger-print" size={52} color={colors.primary} />
-                </View>
-                <Text style={[styles.biometricTitle, { color: palette.text }]}>Face ID / Fingerprint</Text>
-                <Text style={[styles.biometricSubtitle, { color: palette.secondaryText }]}>Scanning for secure access...</Text>
-                <View style={styles.scanBar} />
-              </GlassCard>
-            </View>
           )}
         </ScrollView>
       </LinearGradient>

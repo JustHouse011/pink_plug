@@ -1,27 +1,90 @@
-﻿import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Button from '@/components/ui/Button';
 import { colors, darkColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeProvider';
+import { useAppStore } from '@/store/useAppStore';
+import * as authService from '@/services/authService';
+import { ApiError, ApiNetworkError } from '@/services/api';
+import type { Session } from '@/types';
 
-const sessions = [
-  { device: 'iPhone 15 Pro', location: 'Cape Town, ZA', current: true, lastSeen: 'Active now' },
-  { device: 'Samsung Galaxy S24', location: 'Johannesburg, ZA', current: false, lastSeen: '2 hours ago' },
-  { device: 'Google Pixel 9', location: 'Durban, ZA', current: false, lastSeen: '1 day ago' },
-];
+const describeError = (error: unknown): string => {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof ApiNetworkError) return error.message;
+  return 'Something went wrong. Please try again.';
+};
 
 export default function ManageSessions() {
   const router = useRouter();
   const { isDark } = useTheme();
-  const [activeSessions, setActiveSessions] = useState(sessions);
-  const [selectedSession, setSelectedSession] = useState<(typeof sessions)[number] | null>(null);
+  const logout = useAppStore((state) => state.logout);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [ending, setEnding] = useState(false);
+  const [signingOutAll, setSigningOutAll] = useState(false);
 
-  const endSelectedSession = () => {
+  const loadSessions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const items = await authService.listSessions();
+      setSessions(items);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  const endSelectedSession = async () => {
     if (!selectedSession) return;
-    setActiveSessions((currentSessions) => currentSessions.filter((item) => item.device !== selectedSession.device));
-    setSelectedSession(null);
+
+    if (selectedSession.current) {
+      setSelectedSession(null);
+      Alert.alert('Sign out instead?', 'Use "Sign out of all devices" to end your current session.');
+      return;
+    }
+
+    setEnding(true);
+    try {
+      await authService.revokeSession(selectedSession.id);
+      setSessions((current) => current.filter((item) => item.id !== selectedSession.id));
+      setSelectedSession(null);
+    } catch (err) {
+      Alert.alert('Unable to end session', describeError(err));
+    } finally {
+      setEnding(false);
+    }
+  };
+
+  const signOutEverywhere = () => {
+    Alert.alert('Sign out of all devices?', 'This ends every active session, including this one.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out everywhere',
+        style: 'destructive',
+        onPress: async () => {
+          setSigningOutAll(true);
+          try {
+            await authService.revokeAllSessions();
+            logout();
+            router.replace('/login');
+          } catch (err) {
+            Alert.alert('Unable to sign out everywhere', describeError(err));
+          } finally {
+            setSigningOutAll(false);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -34,27 +97,45 @@ export default function ManageSessions() {
         <Text accessibilityRole="header" style={[styles.title, isDark && styles.darkText]}>Manage active sessions</Text>
 
         <View style={[styles.card, isDark && styles.cardDark]}>
-          {activeSessions.map((item) => (
-            <Pressable
-              key={item.device}
-              accessibilityRole="button"
-              accessibilityLabel={`Manage session for ${item.device}`}
-              onPress={() => setSelectedSession(item)}
-              style={({ pressed }) => [styles.sessionRow, pressed && styles.sessionRowPressed]}
-            >
-              <View style={styles.sessionInfo}>
-                <Text style={[styles.device, isDark && styles.darkText]}>{item.device}</Text>
-                <Text style={[styles.location, isDark && styles.darkSecondaryText]}>{item.location}</Text>
-              </View>
-              <View style={styles.sessionRight}>
-                {item.current ? <Text style={styles.currentBadge}>Current</Text> : null}
-                <Text style={[styles.lastSeen, isDark && styles.darkSecondaryText]}>{item.lastSeen}</Text>
-              </View>
-            </Pressable>
-          ))}
+          {loading ? (
+            <ActivityIndicator style={styles.loader} color={colors.primary} />
+          ) : error ? (
+            <View>
+              <Text style={[styles.location, isDark && styles.darkSecondaryText]}>{error}</Text>
+              <Pressable onPress={loadSessions} style={styles.retryButton}>
+                <Text style={styles.linkText}>Try again</Text>
+              </Pressable>
+            </View>
+          ) : sessions.length === 0 ? (
+            <Text style={[styles.location, isDark && styles.darkSecondaryText]}>No active sessions found.</Text>
+          ) : (
+            sessions.map((item) => (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Manage session for ${item.device}`}
+                onPress={() => setSelectedSession(item)}
+                style={({ pressed }) => [styles.sessionRow, pressed && styles.sessionRowPressed]}
+              >
+                <View style={styles.sessionInfo}>
+                  <Text style={[styles.device, isDark && styles.darkText]}>{item.device}</Text>
+                  <Text style={[styles.location, isDark && styles.darkSecondaryText]}>{item.location}</Text>
+                </View>
+                <View style={styles.sessionRight}>
+                  {item.current ? <Text style={styles.currentBadge}>Current</Text> : null}
+                  <Text style={[styles.lastSeen, isDark && styles.darkSecondaryText]}>{item.lastSeen}</Text>
+                </View>
+              </Pressable>
+            ))
+          )}
         </View>
 
-        <Button label="Sign out of all devices" onPress={() => {}} variant="primary" />
+        <Button
+          label={signingOutAll ? 'Signing out…' : 'Sign out of all devices'}
+          onPress={signOutEverywhere}
+          variant="primary"
+          disabled={signingOutAll}
+        />
       </ScrollView>
 
       <Modal transparent visible={selectedSession !== null} animationType="fade" onRequestClose={() => setSelectedSession(null)}>
@@ -66,7 +147,13 @@ export default function ManageSessions() {
             </Text>
             <View style={styles.modalActions}>
               <Button label="Cancel" onPress={() => setSelectedSession(null)} variant="primary" style={styles.modalButton} />
-              <Button label="End session" onPress={endSelectedSession} variant="danger" style={styles.modalButton} />
+              <Button
+                label={ending ? 'Ending…' : 'End session'}
+                onPress={endSelectedSession}
+                variant="danger"
+                style={styles.modalButton}
+                disabled={ending}
+              />
             </View>
           </View>
         </View>
@@ -90,6 +177,8 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   cardDark: { backgroundColor: darkColors.surface, borderColor: darkColors.border },
+  loader: { paddingVertical: 20 },
+  retryButton: { marginTop: 8 },
   sessionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -114,6 +203,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lastSeen: { color: colors.textSecondary, fontSize: 11 },
+  linkText: { color: colors.primary, fontSize: 13, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(10, 7, 18, 0.65)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   modal: { width: '100%', maxWidth: 380, backgroundColor: 'rgba(255, 255, 255, 0.78)', borderRadius: 22, padding: 20, borderWidth: 1, borderColor: colors.border },
   modalDark: { backgroundColor: darkColors.softSurface, borderColor: darkColors.border },
@@ -122,4 +212,3 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
   modalButton: { flex: 1 },
 });
-

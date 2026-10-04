@@ -116,6 +116,37 @@ export interface User {
   communities: string[];
   savedPlaces: Place[];
   verificationStatus: 'verified' | 'pending' | 'unverified';
+  /** Server-derived (buildUser/serializeUser in pink_plug_backend). Empty/false before profile setup completes. */
+  interests: string[];
+  profileSetupComplete: boolean;
+}
+
+/** M?? AuthChallenge — docs/API-SPECIFICATION.md. Returned by register/login/forgot-password/otp-resend. */
+export interface AuthChallenge {
+  challengeId: string;
+  purpose: 'register' | 'login' | 'password_change' | 'password_reset';
+  delivery: 'email';
+  maskedDestination: string;
+  expiresAt: string;
+  resendAfter: string;
+}
+
+/** Session — docs/API-SPECIFICATION.md. One signed-in device/session for the current user. */
+export interface Session {
+  id: string;
+  device: string;
+  location: string;
+  current: boolean;
+  lastSeen: string;
+  lastSeenAt: string;
+}
+
+/** POST /auth/verify-otp response. Exchange customToken with signInWithCustomToken client-side. */
+export interface VerifyOtpResult {
+  tokenType: 'firebase_custom_token';
+  customToken: string;
+  session: Session;
+  user: User;
 }
 
 export interface DirectoryResource {

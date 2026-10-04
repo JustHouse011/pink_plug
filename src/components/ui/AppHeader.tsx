@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import { colors } from '@/constants/colors';
 import { MOCK_USER } from '@/data/mockUser';
+import * as authService from '@/services/authService';
 import Avatar from '@/components/ui/Avatar';
 import { useAppStore } from '@/store/useAppStore';
 import { useTheme } from '@/context/ThemeProvider';
@@ -131,6 +132,7 @@ export default function AppHeader() {
                 onPress={() => {
                   setHeaderMenuVisible(false);
                   setShowNotifications(false);
+                  authService.logout().catch(() => undefined);
                   logout();
                   router.replace('/login' as never);
                 }}

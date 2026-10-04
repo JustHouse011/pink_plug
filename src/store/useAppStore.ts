@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import type { Event, Place, Review, Tab, TransitMode, Waypoint } from '@/types';
+import type { Event, Place, Review, Session, Tab, TransitMode, User, Waypoint } from '@/types';
 
 type ReviewTarget = 'event' | 'place';
 
@@ -11,6 +11,8 @@ interface AppState {
   onboardingComplete: boolean;
   isAuthenticated: boolean;
   isLoggingOut: boolean;
+  user: User | null;
+  session: Session | null;
   shareLocation: boolean;
   headerMenuVisible: boolean;
   showNotifications: boolean;
@@ -20,8 +22,10 @@ interface AppState {
   selectedEvent: Event | null;
   reviewCache: Record<string, Review[]>;
   completeOnboarding: () => void;
-  login: () => void;
+  login: (user: User, session: Session) => void;
   logout: () => void;
+  setUser: (user: User | null) => void;
+  setSession: (session: Session | null) => void;
   setLoggingOut: (value: boolean) => void;
   setLocationSharing: (value: boolean) => void;
   setActiveTab: (tab: Tab) => void;
@@ -53,6 +57,8 @@ export const useAppStore = create<AppState>((set) => ({
   onboardingComplete: false,
   isAuthenticated: false,
   isLoggingOut: false,
+  user: null,
+  session: null,
   shareLocation: false,
   headerMenuVisible: false,
   showNotifications: false,
@@ -62,12 +68,14 @@ export const useAppStore = create<AppState>((set) => ({
   selectedEvent: null,
   reviewCache: {},
   completeOnboarding: () => set({ onboardingComplete: true }),
-  login: () => set({ isAuthenticated: true, isLoggingOut: false }),
+  login: (user, session) => set({ isAuthenticated: true, isLoggingOut: false, user, session }),
   logout: () => {
     set((state) => ({
       ...state,
       ...resetAuthState(),
       isLoggingOut: true,
+      user: null,
+      session: null,
       waypoints: [],
       transitMode: 'walking',
       selectedPlace: null,
@@ -77,6 +85,8 @@ export const useAppStore = create<AppState>((set) => ({
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   },
   setLoggingOut: (isLoggingOut) => set({ isLoggingOut }),
+  setUser: (user) => set({ user }),
+  setSession: (session) => set({ session }),
   setLocationSharing: (shareLocation) => set({ shareLocation }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setHeaderMenuVisible: (headerMenuVisible) => set({ headerMenuVisible }),

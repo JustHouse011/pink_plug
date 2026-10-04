@@ -10,23 +10,32 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
+import Logo from '@/imports/ICON.svg';
 import { useRouter } from 'expo-router';
 import { colors, darkColors } from '@/constants/colors';
 import GlassCard from '@/components/ui/GlassCard';
-import { mockOtpService } from '@/services/mockOtpService';
+import { useAppStore } from '@/store/useAppStore';
+import * as authService from '@/services/authService';
+import { ApiError, ApiNetworkError } from '@/services/api';
 import { useTheme } from '@/context/ThemeProvider';
+
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{8,128}$/;
 
 export default function Register() {
   const { isDark } = useTheme();
   const router = useRouter();
+  const login = useAppStore((state) => state.login);
   const [name, setName] = useState('');
   const [surname, setSurname] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
+  const [challengeId, setChallengeId] = useState('');
+  const [maskedDestination, setMaskedDestination] = useState('');
   const [enteredCode, setEnteredCode] = useState('');
   const palette = isDark
     ? {
@@ -47,6 +56,12 @@ export default function Register() {
         secondaryText: colors.textSecondary,
         muted: colors.muted,
       };
+
+  const describeError = (error: unknown): string => {
+    if (error instanceof ApiError) return error.message;
+    if (error instanceof ApiNetworkError) return error.message;
+    return 'Something went wrong. Please try again.';
+  };
 
   const handleCreateAccount = async () => {
     if (!name.trim()) {
@@ -69,30 +84,63 @@ export default function Register() {
       return;
     }
 
+    if (!PASSWORD_PATTERN.test(password)) {
+      Alert.alert('Choose a stronger password', 'Use 8-128 characters with an uppercase letter, a lowercase letter, a number, a symbol, and no spaces.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Passwords don’t match', 'Please re-enter your password.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await mockOtpService.sendOtp(email.trim());
-      setVerificationCode(result.otp);
+      const challenge = await authService.register({
+        name: name.trim(),
+        surname: surname.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password,
+      });
+      setChallengeId(challenge.challengeId);
+      setMaskedDestination(challenge.maskedDestination);
       setVerificationSent(true);
-      Alert.alert('Verification email sent', `${result.message} OTP: ${result.otp}`);
-    } catch {
-      Alert.alert('Unable to send email', 'Please try again.');
+      setEnteredCode('');
+    } catch (error) {
+      Alert.alert('Unable to create account', describeError(error));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const normalizedCode = enteredCode.trim();
-    const isValid = mockOtpService.verifyOtp(normalizedCode, verificationCode);
-
-    if (!isValid) {
+    if (!/^\d{6}$/.test(normalizedCode)) {
       Alert.alert('Invalid verification code', 'Please check the code and try again.');
       return;
     }
 
-    Alert.alert('Account created', 'Your account has been verified successfully.');
-    router.replace('/profile-setup');
+    setVerifying(true);
+    try {
+      const { user, session } = await authService.verifyOtp(challengeId, normalizedCode);
+      login(user, session);
+      router.replace('/profile-setup');
+    } catch (error) {
+      Alert.alert('Unable to verify code', describeError(error));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    try {
+      const challenge = await authService.resendOtp(challengeId);
+      setMaskedDestination(challenge.maskedDestination);
+      Alert.alert('Code resent', `We sent a new code to ${challenge.maskedDestination}.`);
+    } catch (error) {
+      Alert.alert('Unable to resend code', describeError(error));
+    }
   };
 
   const handleBack = () => {
@@ -116,7 +164,7 @@ export default function Register() {
           </Pressable>
 
           <View style={styles.logoWrap}>
-            <Image source={require('@/imports/ICON.svg')} style={styles.logo} contentFit="contain" />
+            <Logo width={styles.logo.width} height={styles.logo.height} />
           </View>
 
           <Text accessibilityRole="header" style={[styles.title, { color: palette.text }]}>Create account</Text>
@@ -166,6 +214,33 @@ export default function Register() {
                 style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.text }]}
               />
 
+              <Text style={[styles.label, { color: palette.text }]}>Password</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="At least 8 characters"
+                placeholderTextColor={palette.muted}
+                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.text }]}
+              />
+              <Text style={[styles.helperText, { color: palette.secondaryText }]}>
+                Use 8+ characters with an uppercase letter, a lowercase letter, a number, and a symbol.
+              </Text>
+
+              <Text style={[styles.label, { color: palette.text }]}>Confirm password</Text>
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Re-enter your password"
+                placeholderTextColor={palette.muted}
+                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.text }]}
+              />
+
               <Pressable onPress={handleCreateAccount} style={styles.primaryButton} disabled={loading}>
                 <LinearGradient
                   colors={[colors.primary, '#C432D9']}
@@ -180,8 +255,7 @@ export default function Register() {
           ) : (
             <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>Email verification</Text>
-              <Text style={[styles.helperText, { color: palette.secondaryText }]}>Enter the 6-digit code sent to {email}</Text>
-              <Text style={styles.demoOtp}>Demo code: {verificationCode}</Text>
+              <Text style={[styles.helperText, { color: palette.secondaryText }]}>Enter the 6-digit code sent to {maskedDestination || email}</Text>
 
               <TextInput
                 value={enteredCode}
@@ -193,19 +267,19 @@ export default function Register() {
                 style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.text }]}
               />
 
-              <Pressable onPress={handleVerify} style={styles.primaryButton}>
+              <Pressable onPress={handleVerify} style={styles.primaryButton} disabled={verifying}>
                 <LinearGradient
                   colors={[colors.primary, '#C432D9']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.buttonGradient}
                 >
-                  <Text style={styles.primaryText}>Verify & continue</Text>
+                  <Text style={styles.primaryText}>{verifying ? 'Verifying...' : 'Verify & continue'}</Text>
                 </LinearGradient>
               </Pressable>
 
               <View style={styles.secondaryRow}>
-                <Pressable onPress={handleCreateAccount}>
+                <Pressable onPress={handleResendCode}>
                   <Text style={styles.linkText}>Resend code</Text>
                 </Pressable>
                 <Pressable onPress={() => setVerificationSent(false)}>

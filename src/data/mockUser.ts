@@ -14,4 +14,6 @@ export const MOCK_USER: User = {
   communities: ['Cape Town Queers', 'Trans South Africa', 'Queer POC Network', 'Pride Cape Town'],
   savedPlaces: [MOCK_PLACES[0], MOCK_PLACES[2], MOCK_PLACES[4]],
   verificationStatus: 'verified',
+  interests: ['Community', 'Travel', 'Nightlife'],
+  profileSetupComplete: true,
 };

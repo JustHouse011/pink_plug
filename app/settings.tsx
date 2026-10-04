@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@/constants/colors';
 import { MOCK_USER } from '@/data/mockUser';
+import * as authService from '@/services/authService';
 import Avatar from '@/components/ui/Avatar';
 import Button from '@/components/ui/Button';
 import GlassCard from '@/components/ui/GlassCard';
@@ -67,6 +68,7 @@ export default function Settings() {
   };
 
   const handleLogout = () => {
+    authService.logout().catch(() => undefined);
     logout();
     router.replace('/login');
   };
