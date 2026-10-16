@@ -11,28 +11,24 @@ import Chip from '@/components/ui/Chip';
 import SectionHeader from '@/components/ui/SectionHeader';
 import { colors, darkColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeProvider';
-import { MOCK_EVENTS, MOCK_PLACES } from '@/data/mockData';
+import LoadState from '@/components/ui/LoadState';
+import { useEvents, usePlaces, useSavedPlaces, useToggleSavedPlace } from '@/hooks/useApi';
 import type { Event, Place } from '@/types';
 import { eventRoute, routes, placeRoute } from '@/navigation/routes';
 
-const normalizedPlaces = MOCK_PLACES.map((place) => ({
-  value: place,
-  searchText: `${place.name} ${place.city} ${place.category} ${place.address}`.toLowerCase(),
-}));
-const normalizedEvents = MOCK_EVENTS.map((event) => ({
-  value: event,
-  searchText: `${event.title} ${event.venue} ${event.address} ${event.description} ${event.tags.join(' ')}`.toLowerCase(),
-}));
-const noop = () => undefined;
+const placeSearchText = (place: Place) => `${place.name} ${place.city} ${place.category} ${place.address}`.toLowerCase();
+const eventSearchText = (event: Event) => `${event.title} ${event.venue} ${event.address} ${event.description} ${event.tags.join(' ')}`.toLowerCase();
 
-const ExplorePlaceRow = memo(function ExplorePlaceRow({ place, index, viewportHeight }: { place: Place; index: number; viewportHeight: number }) {
+const ExplorePlaceRow = memo(function ExplorePlaceRow({ place, index, viewportHeight, saved }: { place: Place; index: number; viewportHeight: number; saved: boolean }) {
   const router = useRouter();
+  const toggleSaved = useToggleSavedPlace();
   return (
     <View style={styles.gridItem}>
       <AnimatedCard index={index} pressFeedback viewportHeight={viewportHeight}>
         <NearbyCard
           place={place}
-          onToggleSave={noop}
+          saved={saved}
+          onToggleSave={() => toggleSaved.mutate({ place, saved: !saved })}
           style={styles.gridCard}
           onPress={() => router.push(placeRoute(place.id))}
         />
@@ -55,7 +51,7 @@ function ExploreHeader({ query, setQuery, tab, setTab, isDark }: { query: string
         accessibilityLabel="Search spaces and events"
         value={query}
         onChangeText={setQuery}
-        placeholder="Search spaces, events, people..."
+        placeholder="Search spaces and events..."
         placeholderTextColor={colors.muted}
         style={[styles.search, isDark && styles.searchDark]}
       />
@@ -77,10 +73,17 @@ export default function Explore() {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'spaces' | 'events'>('spaces');
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
-  const filteredPlaces = useMemo(() => normalizedPlaces.filter((item) => item.searchText.includes(deferredQuery)).map((item) => item.value), [deferredQuery]);
-  const filteredEvents = useMemo(() => normalizedEvents.filter((item) => item.searchText.includes(deferredQuery)).map((item) => item.value), [deferredQuery]);
+  const placesQuery = usePlaces();
+  const eventsQuery = useEvents();
+  const savedPlacesQuery = useSavedPlaces();
+  const savedIds = useMemo(() => new Set((savedPlacesQuery.data ?? []).map((place) => place.id)), [savedPlacesQuery.data]);
+  const filteredPlaces = useMemo(() => (placesQuery.data ?? []).filter((place) => placeSearchText(place).includes(deferredQuery)), [placesQuery.data, deferredQuery]);
+  const filteredEvents = useMemo(() => (eventsQuery.data ?? []).filter((event) => eventSearchText(event).includes(deferredQuery)), [eventsQuery.data, deferredQuery]);
+  const activeQuery = tab === 'spaces' ? placesQuery : eventsQuery;
   const header = <ExploreHeader query={query} setQuery={setQuery} tab={tab} setTab={setTab} isDark={isDark} />;
-  const emptyState = (
+  const emptyState = activeQuery.isPending || activeQuery.error ? (
+    <LoadState loading={activeQuery.isPending} error={activeQuery.error} onRetry={() => activeQuery.refetch()} />
+  ) : (
     <Card style={styles.emptyCard}>
       <Text style={[styles.emptyTitle, isDark && styles.darkText]}>No results found</Text>
       <Text style={[styles.emptyCopy, isDark && styles.darkSecondaryText]}>
@@ -97,7 +100,7 @@ export default function Explore() {
           key="spaces-grid"
           data={filteredPlaces}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => <ExplorePlaceRow place={item} index={index} viewportHeight={viewportHeight} />}
+          renderItem={({ item, index }) => <ExplorePlaceRow place={item} index={index} viewportHeight={viewportHeight} saved={savedIds.has(item.id)} />}
           numColumns={2}
           columnWrapperStyle={styles.columns}
           ListHeaderComponent={header}

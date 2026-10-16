@@ -6,8 +6,9 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import ReviewSection from '@/components/reviews/ReviewSection';
 import { colors, darkColors } from '@/constants/colors';
-import { MOCK_PLACES } from '@/data/mockData';
+import LoadState from '@/components/ui/LoadState';
 import { useAppStore } from '@/store/useAppStore';
+import { useCreateReview, usePlace, useSavedPlaces, useToggleSavedPlace } from '@/hooks/useApi';
 import { useTheme } from '@/context/ThemeProvider';
 
 const renderStars = (rating: number) => {
@@ -19,28 +20,47 @@ export default function PlaceDetail() {
   const router = useRouter();
   const { isDark } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const place = MOCK_PLACES.find((item) => item.id === id) ?? MOCK_PLACES[0];
+  const placeQuery = usePlace(id);
+  const createReview = useCreateReview('place', id ?? '');
+  const savedPlaces = useSavedPlaces();
+  const toggleSaved = useToggleSavedPlace();
   const add = useAppStore((state) => state.addWaypoint);
-  const reviewCache = useAppStore((state) => state.reviewCache);
-  const addReview = useAppStore((state) => state.addReview);
-  const reviewList = reviewCache[`place:${place.id}`] ?? place.reviews;
+  const place = placeQuery.data;
 
-  const handleSubmitReview = ({ rating, headline, comment }: { rating: number; headline: string; comment: string }) => {
-    addReview('place', place.id, { rating, headline, comment });
+  const back = (
+    <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
+      <Text style={styles.back}>‹  Back</Text>
+    </Pressable>
+  );
+
+  if (!place) {
+    return (
+      <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
+        <View style={styles.content}>
+          {back}
+          <LoadState loading={placeQuery.isPending} error={placeQuery.error} onRetry={() => placeQuery.refetch()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const reviewList = place.reviews;
+  const isSaved = savedPlaces.data?.some((item) => item.id === place.id) ?? false;
+
+  const handleSubmitReview = async ({ rating, headline, comment }: { rating: number; headline: string; comment: string }) => {
+    await createReview.mutateAsync({ rating, headline, comment });
   };
 
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
-          <Text style={styles.back}>‹  Back</Text>
-        </Pressable>
+        {back}
         <Image source={{ uri: place.imageUrl }} style={styles.hero} contentFit="cover" />
         <Text style={[styles.title, isDark && styles.darkText]}>{place.name}</Text>
         <Text style={[styles.meta, isDark && styles.darkSecondaryText]}>📍 {place.address}</Text>
         <View style={styles.row}>
-          <Text style={styles.rating}>{renderStars(reviewList.reduce((sum, item) => sum + item.rating, 0) / reviewList.length)} {(reviewList.reduce((sum, item) => sum + item.rating, 0) / reviewList.length || 0).toFixed(1)}</Text>
-          <Text style={[styles.meta, isDark && styles.darkSecondaryText]}>({reviewList.length} reviews) · {place.distance}</Text>
+          <Text style={styles.rating}>{renderStars(place.rating)} {place.rating.toFixed(1)}</Text>
+          <Text style={[styles.meta, isDark && styles.darkSecondaryText]}>({place.reviewCount} reviews){place.distance ? ` · ${place.distance}` : ''}</Text>
         </View>
 
         <View style={styles.badges}>
@@ -63,10 +83,15 @@ export default function PlaceDetail() {
         <Text style={[styles.section, isDark && styles.darkText]}>Opening hours</Text>
         <Text style={[styles.copy, isDark && styles.darkSecondaryText]}>{place.hours}</Text>
 
-        <ReviewSection reviews={reviewList} onSubmit={handleSubmitReview} />
+        <ReviewSection reviews={reviewList} rating={place.rating} reviewCount={place.reviewCount} onSubmit={handleSubmitReview} />
 
         <View style={styles.actions}>
           <Button label="Add to Pink Route" onPress={() => add(place)} />
+          <Button
+            label={isSaved ? 'Saved ♥' : 'Save place'}
+            variant="secondary"
+            onPress={() => toggleSaved.mutate({ place, saved: !isSaved })}
+          />
           <Button
             label="Directions"
             variant="secondary"

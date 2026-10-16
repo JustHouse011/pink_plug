@@ -5,7 +5,8 @@ import { useTabScreenLayout } from '@/layout/tabLayout';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, darkColors } from '@/constants/colors';
-import { MOCK_USER } from '@/data/mockUser';
+import LoadState from '@/components/ui/LoadState';
+import { useMe, useSavedPlaces } from '@/hooks/useApi';
 import Avatar from '@/components/ui/Avatar';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
@@ -18,28 +19,38 @@ export default function Profile() {
   const tabLayout = useTabScreenLayout();
   const router = useRouter();
   const [tab, setTab] = useState('Saved');
-  const user = MOCK_USER;
+  const meQuery = useMe();
+  const savedPlacesQuery = useSavedPlaces();
+  const user = meQuery.data;
+  const savedPlaces = savedPlacesQuery.data ?? [];
   const { isDark } = useTheme();
   const palette = isDark ? darkColors : colors;
+
+  if (!user) {
+    return (
+      <SafeAreaView edges={tabLayout.edges} style={styles.safe}>
+        <LoadState loading={meQuery.isPending} error={meQuery.error} onRetry={() => meQuery.refetch()} style={styles.content} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={tabLayout.edges} style={styles.safe}>
       <ScrollView {...tabLayout.scrollProps} contentContainerStyle={[styles.content, tabLayout.contentStyle]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Avatar value={user.avatar} size={78} />
+          <Avatar value={user.avatar} imageUri={user.profileImageUrl} size={78} />
           <View style={styles.identity}>
-            <Text style={[styles.name, { color: palette.textPrimary }]}>{user.name} ✓</Text>
-            <Text style={[styles.meta, { color: palette.textSecondary }]}>{user.handle} · {user.city}</Text>
+            <Text style={[styles.name, { color: palette.textPrimary }]}>{user.name}{user.verificationStatus === 'verified' ? ' ✓' : ''}</Text>
+            <Text style={[styles.meta, { color: palette.textSecondary }]}>{[user.handle, user.city].filter(Boolean).join(' · ')}</Text>
             <Text style={[styles.bio, { color: palette.textSecondary }]}>{user.bio}</Text>
           </View>
         </View>
 
         <GlassCard level="standard" gradientBorder="emphasized" style={styles.stats}>
           {[
-            ['Saved', user.savedPlaces.length],
-            ['Routes', 4],
-            ['Reviews', 12],
-            ['Following', 89],
+            ['Saved', savedPlaces.length],
+            ['Communities', user.communities.length],
+            ['Interests', user.interests.length],
           ].map(([label, value]) => (
             <View key={label as string} style={styles.stat}>
               <Text style={[styles.statValue, { color: palette.textPrimary }]}>{value}</Text>
@@ -100,15 +111,24 @@ export default function Profile() {
         </View>
 
         {tab === 'Saved' ? (
-          user.savedPlaces.map((place) => (
+          savedPlaces.length === 0 ? (
+            <LoadState
+              loading={savedPlacesQuery.isPending}
+              error={savedPlacesQuery.error}
+              onRetry={() => savedPlacesQuery.refetch()}
+              emptyText="Places you save will appear here."
+            />
+          ) : savedPlaces.map((place) => (
             <Card key={place.id} style={styles.item}>
+              <Pressable accessibilityRole="button" onPress={() => router.push(`/places/${place.id}`)} style={styles.itemPress}>
               <View style={styles.itemIconWrap}>
                 <Ionicons name="location-outline" size={20} color={colors.primary} />
               </View>
               <View style={styles.identity}>
                 <Text style={[styles.itemTitle, { color: palette.textPrimary }]}>{place.name}</Text>
-                <Badge label="Community verified" />
+                {place.verifications[0] ? <Badge label={place.verifications[0].replace('_', ' ')} /> : null}
               </View>
+              </Pressable>
             </Card>
           ))
         ) : tab === 'Settings' ? (
@@ -190,6 +210,7 @@ const styles = StyleSheet.create({
   },
   contactsTitle: { color: colors.textPrimary, fontWeight: '600' },
   tabs: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 16 },
+  itemPress: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
   itemIconWrap: {
     width: 34,

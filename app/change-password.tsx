@@ -5,7 +5,9 @@ import { useRouter } from 'expo-router';
 import Button from '@/components/ui/Button';
 import GlassCard from '@/components/ui/GlassCard';
 import { colors, darkColors } from '@/constants/colors';
-import { mockOtpService } from '@/services/mockOtpService';
+import * as authService from '@/services/authService';
+import { errorMessage } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 import { useTheme } from '@/context/ThemeProvider';
 
 export default function ChangePassword() {
@@ -16,7 +18,9 @@ export default function ChangePassword() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [maskedDestination, setMaskedDestination] = useState('');
+  const [busy, setBusy] = useState(false);
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -66,26 +70,45 @@ export default function ChangePassword() {
       return;
     }
 
-    const result = await mockOtpService.sendOtp('your email or phone');
-    setVerificationCode(result.otp);
-    setStatus(result.message);
-    setOtpSent(true);
-    setOtpModalVisible(true);
+    setBusy(true);
+    try {
+      // Resend on an existing challenge; otherwise verify the current password and start one.
+      const challenge = challengeId
+        ? await authService.resendOtp(challengeId)
+        : await authService.changePasswordChallenge(currentPassword);
+      setChallengeId(challenge.challengeId);
+      setMaskedDestination(challenge.maskedDestination);
+      setStatus(`We sent a verification code to ${challenge.maskedDestination}.`);
+      setOtpSent(true);
+      setOtpCode('');
+      setOtpModalVisible(true);
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     if (!/^\d{6}$/.test(otpCode)) {
       setStatus('Enter the 6-digit verification code.');
       return;
     }
+    if (!challengeId) return;
 
-    if (!mockOtpService.verifyOtp(otpCode, verificationCode)) {
-      setStatus('Invalid OTP. Please try again.');
-      return;
+    setBusy(true);
+    try {
+      await authService.changePassword(challengeId, otpCode, newPassword);
+      setOtpModalVisible(false);
+      // The server revokes every session after a password change, so sign in again.
+      await authService.logout();
+      useAppStore.getState().logout();
+      router.replace('/login');
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setBusy(false);
     }
-
-    setOtpModalVisible(false);
-    setStatus('Password changed successfully.');
   };
 
   return (
@@ -98,7 +121,7 @@ export default function ChangePassword() {
         <Text accessibilityRole="header" style={[styles.title, isDark && styles.darkText]}>Change password</Text>
 
         <GlassCard style={[styles.card, isDark && styles.cardDark]}>
-          <Text style={[styles.infoText, isDark && styles.darkSecondaryText]}>We’ll send a one-time verification code to your registered email or phone before updating your password.</Text>
+          <Text style={[styles.infoText, isDark && styles.darkSecondaryText]}>We’ll email a one-time verification code before updating your password. You’ll be signed out everywhere afterwards.</Text>
 
           <Text style={[styles.label, isDark && styles.darkText]}>Current password</Text>
           <TextInput
@@ -138,7 +161,7 @@ export default function ChangePassword() {
           {status ? <Text style={styles.status}>{status}</Text> : null}
         </GlassCard>
 
-        <Button label={otpSent ? 'Send OTP again' : 'Send OTP'} onPress={handleSendOtp} />
+        <Button label={busy ? 'Please wait…' : otpSent ? 'Send code again' : 'Send code'} onPress={handleSendOtp} disabled={busy} />
       </ScrollView>
 
       <Modal
@@ -150,11 +173,8 @@ export default function ChangePassword() {
         <View style={styles.modalOverlay}>
           <GlassCard intensity={35} style={[styles.modalCard, isDark && styles.modalCardDark]}>
             <Text style={[styles.modalTitle, isDark && styles.darkText]}>Enter verification code</Text>
-            <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>Your mock OTP was sent to your registered email or phone.</Text>
-            <View style={[styles.mockCodeBox, isDark && styles.mockCodeBoxDark]}>
-              <Text style={[styles.mockCodeLabel, isDark && styles.darkSecondaryText]}>Mock OTP</Text>
-              <Text style={[styles.mockCode, isDark && styles.darkText]}>{verificationCode}</Text>
-            </View>
+            <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>Enter the code we sent to {maskedDestination || 'your email'}.</Text>
+            {status ? <Text style={styles.status}>{status}</Text> : null}
             <TextInput
               autoFocus
               value={otpCode}
@@ -167,7 +187,7 @@ export default function ChangePassword() {
             />
             <View style={styles.modalActions}>
               <Button label="Cancel" onPress={() => setOtpModalVisible(false)} variant="secondary" style={styles.modalButton} />
-              <Button label="Verify" onPress={handleVerifyOtp} style={styles.modalButton} />
+              <Button label={busy ? 'Verifying…' : 'Verify'} onPress={handleVerifyOtp} disabled={busy} style={styles.modalButton} />
             </View>
           </GlassCard>
         </View>

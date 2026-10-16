@@ -32,6 +32,8 @@ export interface Review {
   headline: string;
   comment: string;
   timeAgo: string;
+  authorId?: string;
+  createdAt?: string | null;
 }
 
 export interface Place {
@@ -86,6 +88,9 @@ export interface CommunityPost {
   timeAgo: string;
   city: string;
   tags: string[];
+  authorId?: string;
+  createdAt?: string | null;
+  likedByMe?: boolean;
 }
 
 export interface SafetyResource {
@@ -158,4 +163,123 @@ export interface DirectoryResource {
   description: string;
   detail: string;
   badge: string;
+}
+
+/** Pagination meta returned alongside list responses. */
+export interface PageMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  unreadCount?: number;
+}
+
+export interface Paged<T> {
+  items: T[];
+  meta: PageMeta;
+}
+
+export interface Option {
+  value: string;
+  label: string;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  author: string;
+  text: string;
+  authorId?: string;
+  createdAt: string | null;
+}
+
+export interface Campaign {
+  id: string;
+  title: string;
+  host: string;
+  date: string;
+  location: string;
+  image: string;
+  tags: string[];
+  metrics: { label: string; value: string }[];
+}
+
+export type ParticipationRole = 'Couple Joining Mass Wedding' | 'Guest / Supporter' | 'Media / Press';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  detail: string;
+  time: string;
+  createdAt: string | null;
+  read: boolean;
+}
+
+export interface UserSettings {
+  pushNotifications: boolean;
+  mutePushNotifications: boolean;
+  pushNewEvent: boolean;
+  pushCommunityReview: boolean;
+  emailNotifications: boolean;
+  muteEmailNotifications: boolean;
+  emailNewEvent: boolean;
+  emailCommunityReview: boolean;
+  twoFactorEnabled: boolean;
+  loginAlerts: boolean;
+  profileVisible: boolean;
+  shareLocation: boolean;
+  showLocation: boolean;
+  allowMessages: boolean;
+  dataSharing: boolean;
+}
+
+export type MediaKind = 'profile_photo' | 'verification_selfie';
+
+export interface Media {
+  id: string;
+  kind: MediaKind;
+  mimeType: string;
+  sizeBytes: number;
+  url: string | null;
+  width: number;
+  height: number;
+  createdAt: string | null;
+}
+
+export interface SelfieVerification {
+  id: string;
+  status: 'pending' | 'verified' | 'rejected';
+  createdAt: string | null;
+  completedAt: string | null;
+}
+
+export interface TrustedContact {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: string;
+  isVerified: boolean;
+  canReceiveSms: boolean;
+  canReceiveCall: boolean;
+  shareLiveLocation: boolean;
+}
+
+export interface PlannedRoute {
+  id: string;
+  mode: TransitMode;
+  placeIds: string[];
+  selectedPlaceId: string | null;
+  status: 'draft' | 'active' | 'ended';
+  departureAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
+export interface CheckIn {
+  id: string;
+  placeId: string;
+  routeId?: string;
+  createdAt: string | null;
+  observedAt: string | null;
+  status: string;
 }

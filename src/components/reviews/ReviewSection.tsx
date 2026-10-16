@@ -4,10 +4,15 @@ import { colors, darkColors } from '@/constants/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import { useTheme } from '@/context/ThemeProvider';
 import type { Review } from '@/types';
+import { errorMessage } from '@/services/api';
 
 interface ReviewSectionProps {
   reviews: Review[];
-  onSubmit: (review: { rating: number; headline: string; comment: string }) => void;
+  /** May return a promise; the form clears only once it resolves, and shows the error if it rejects. */
+  onSubmit: (review: { rating: number; headline: string; comment: string }) => void | Promise<void>;
+  /** Server-side aggregate; falls back to averaging the loaded reviews. */
+  rating?: number;
+  reviewCount?: number;
 }
 
 const renderStars = (rating: number) => {
@@ -15,33 +20,42 @@ const renderStars = (rating: number) => {
   return '★'.repeat(fullStars) + '☆'.repeat(5 - fullStars);
 };
 
-export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps) {
+export default function ReviewSection({ reviews, onSubmit, rating, reviewCount }: ReviewSectionProps) {
   const { isDark } = useTheme();
   const [userRating, setUserRating] = useState(5);
   const [headline, setHeadline] = useState('');
   const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const summary = useMemo(() => {
-    const count = reviews.length || 1;
-    const average = reviews.reduce((total, review) => total + review.rating, 0) / count;
+    const count = reviewCount ?? reviews.length;
+    const average = rating ?? (reviews.length ? reviews.reduce((total, review) => total + review.rating, 0) / reviews.length : 0);
     return { average, count };
-  }, [reviews]);
+  }, [reviews, rating, reviewCount]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const trimmedComment = comment.trim();
-    if (!trimmedComment) {
+    if (!trimmedComment || submitting) {
       return;
     }
 
-    onSubmit({
-      rating: userRating,
-      headline: headline.trim() || 'My experience',
-      comment: trimmedComment,
-    });
-
-    setHeadline('');
-    setComment('');
-    setUserRating(5);
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmit({
+        rating: userRating,
+        headline: headline.trim() || 'My experience',
+        comment: trimmedComment,
+      });
+      setHeadline('');
+      setComment('');
+      setUserRating(5);
+    } catch (error) {
+      setSubmitError(errorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -104,8 +118,9 @@ export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps)
           style={[styles.input, styles.textArea, isDark && styles.inputDark]}
         />
 
-        <Pressable onPress={handleSubmit} style={styles.submitButton}>
-          <Text style={styles.submitLabel}>Submit review</Text>
+        {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
+        <Pressable onPress={handleSubmit} disabled={submitting} style={[styles.submitButton, submitting && { opacity: 0.6 }]}>
+          <Text style={styles.submitLabel}>{submitting ? 'Submitting…' : 'Submit review'}</Text>
         </Pressable>
       </GlassCard>
     </View>
@@ -113,6 +128,7 @@ export default function ReviewSection({ reviews, onSubmit }: ReviewSectionProps)
 }
 
 const styles = StyleSheet.create({
+  errorText: { color: colors.danger, fontSize: 13, marginBottom: 8 },
   section: { color: colors.textPrimary, fontSize: 16, fontWeight: '600', marginTop: 24, marginBottom: 7 },
   reviewSummary: {
     flexDirection: 'row',

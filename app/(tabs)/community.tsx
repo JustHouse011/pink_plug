@@ -5,36 +5,78 @@ import { useTabScreenLayout } from '@/layout/tabLayout';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeProvider';
-import { MOCK_POSTS } from '@/data/mockData';
-import type { CommunityPost } from '@/types';
+import { useAddComment, useComments, useCreatePost, useFeed, useToggleLike } from '@/hooks/useApi';
+import { COMMUNITY_CITIES, type CommunityCity } from '@/services/community';
+import { errorMessage } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
+import LoadState from '@/components/ui/LoadState';
 import Avatar from '@/components/ui/Avatar';
 import Card from '@/components/ui/Card';
 import Chip from '@/components/ui/Chip';
 import { shareContent } from '@/services/sharing';
 
+/** Existing comments for a post plus the reply box; loads only while the thread is open. */
+function CommentThread({ postId, isDark }: { postId: string; isDark: boolean }) {
+  const commentsQuery = useComments(postId);
+  const addComment = useAddComment(postId);
+  const [draft, setDraft] = useState('');
+
+  const submit = () => {
+    const text = draft.trim();
+    if (!text || addComment.isPending) return;
+    addComment.mutate(text, { onSuccess: () => setDraft('') });
+  };
+
+  return (
+    <View>
+      {(commentsQuery.data?.items ?? []).map((comment) => (
+        <Text key={comment.id} style={[styles.commentItem, isDark && styles.darkSecondaryText]}>
+          <Text style={[styles.commentAuthor, isDark && styles.darkText]}>{comment.author}</Text> {comment.text}
+        </Text>
+      ))}
+      <LoadState loading={commentsQuery.isPending} error={commentsQuery.error} onRetry={() => commentsQuery.refetch()} style={styles.commentState} />
+      {addComment.error ? <Text style={styles.errorText}>{errorMessage(addComment.error)}</Text> : null}
+      <View style={styles.commentComposer}>
+        <TextInput
+          autoFocus
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="Write a comment..."
+          placeholderTextColor={isDark ? darkColors.muted : colors.muted}
+          style={[styles.commentInput, isDark && styles.commentInputDark]}
+          returnKeyType="send"
+          onSubmitEditing={submit}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Post comment"
+          onPress={submit}
+          disabled={addComment.isPending}
+          style={styles.commentButton}
+        >
+          <Text style={styles.commentButtonText}>{addComment.isPending ? '…' : 'Post'}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function Community() {
   const tabLayout = useTabScreenLayout();
   const { isDark } = useTheme();
-  const [posts, setPosts] = useState<CommunityPost[]>(MOCK_POSTS);
-  const [liked, setLiked] = useState<string[]>([]);
+  const user = useAppStore((state) => state.user);
+  const defaultCity = COMMUNITY_CITIES.find((item) => item === user?.city) ?? 'Cape Town';
   const [commenting, setCommenting] = useState<string | null>(null);
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [shared, setShared] = useState<string[]>([]);
   const [sharePost, setSharePost] = useState<{ id: string; author: string; content: string } | null>(null);
   const [composeVisible, setComposeVisible] = useState(false);
   const [postDraft, setPostDraft] = useState('');
-  const [city, setCity] = useState('Cape Town');
+  const [city, setCity] = useState<CommunityCity>(defaultCity);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
-
-  const handleComment = (postId: string) => {
-    const comment = commentDrafts[postId]?.trim();
-    if (!comment) return;
-
-    setCommentCounts((current) => ({ ...current, [postId]: (current[postId] ?? 0) + 1 }));
-    setCommentDrafts((current) => ({ ...current, [postId]: '' }));
-    setCommenting(null);
-  };
+  const feedQuery = useFeed(city);
+  const posts = feedQuery.data?.items ?? [];
+  const createPost = useCreatePost();
+  const toggleLike = useToggleLike();
 
   const handleShare = async (postId: string, author: string, content: string) => {
     const didShare = await shareContent({
@@ -56,24 +98,16 @@ export default function Community() {
     const content = postDraft.trim();
     if (!content) return;
 
-    const newPost: CommunityPost = {
-      id: `local-${Date.now()}`,
-      author: 'Bongani Nombamba',
-      avatar: '🌈',
-      handle: '@bonganinombamba',
-      content,
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      timeAgo: 'just now',
-      city,
-      tags: [],
-    };
-
-    setPosts((current) => [newPost, ...current]);
-    setPostDraft('');
-    setComposeVisible(false);
-    setShareNotice('Post published locally. Share is available from the post actions.');
+    createPost.mutate(
+      { content, city },
+      {
+        onSuccess: () => {
+          setPostDraft('');
+          setComposeVisible(false);
+          setShareNotice('Post published. Share is available from the post actions.');
+        },
+      },
+    );
   };
 
   const handleSocialShare = async (_channel: 'whatsapp' | 'facebook' | 'x' | 'linkedin') => {
@@ -108,22 +142,32 @@ export default function Community() {
           <>
             <Text accessibilityRole="header" style={[styles.title, isDark && styles.darkText]}>Community</Text>
             <View style={styles.chips}>
-              {['Cape Town', 'Johannesburg', 'Durban', 'Pretoria'].map((item) => (
+              {COMMUNITY_CITIES.map((item) => (
                 <Chip key={item} label={item} active={item === city} onPress={() => setCity(item)} />
               ))}
             </View>
 
             <Pressable onPress={() => setComposeVisible(true)} accessibilityRole="button" accessibilityLabel="Write a community post">
               <Card style={styles.composer}>
-                <Avatar value={'🌈'} size={36} />
+                <Avatar value={user?.avatar || '🌈'} imageUri={user?.profileImageUrl} size={36} />
                 <Text style={styles.placeholder}>Share with the {city} community...</Text>
                 <Ionicons name="pencil-outline" size={18} color={isDark ? colors.primary : colors.muted} />
               </Card>
             </Pressable>
           </>
         }
+        ListEmptyComponent={
+          <LoadState
+            loading={feedQuery.isPending}
+            error={feedQuery.error}
+            onRetry={() => feedQuery.refetch()}
+            emptyText={`No posts in ${city} yet. Be the first to share.`}
+          />
+        }
+        refreshing={feedQuery.isRefetching}
+        onRefresh={() => feedQuery.refetch()}
         renderItem={({ item }) => {
-          const isLiked = liked.includes(item.id);
+          const isLiked = Boolean(item.likedByMe);
 
           return (
             <Card style={styles.post}>
@@ -148,11 +192,7 @@ export default function Community() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Like post"
-                  onPress={() =>
-                    setLiked((current) =>
-                      isLiked ? current.filter((id) => id !== item.id) : [...current, item.id]
-                    )
-                  }
+                  onPress={() => toggleLike.mutate({ post: item })}
                 >
                   <Text style={[styles.actionText, isDark && styles.darkSecondaryText]}>
                     <Ionicons
@@ -160,7 +200,7 @@ export default function Community() {
                       size={15}
                       color={isLiked ? colors.danger : colors.textSecondary}
                     />{' '}
-                    {item.likes + (isLiked ? 1 : 0)}
+                    {item.likes}
                   </Text>
                 </Pressable>
 
@@ -171,7 +211,7 @@ export default function Community() {
                 >
                   <Text style={[styles.actionText, isDark && styles.darkSecondaryText]}>
                     <Ionicons name="chatbubble-outline" size={15} color={isDark ? colors.primary : colors.textSecondary} />{' '}
-                    {item.comments + (commentCounts[item.id] ?? 0)}
+                    {item.comments}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -187,26 +227,7 @@ export default function Community() {
               </View>
 
               {commenting === item.id && (
-                <View style={styles.commentComposer}>
-                  <TextInput
-                    autoFocus
-                    value={commentDrafts[item.id] ?? ''}
-                    onChangeText={(value) => setCommentDrafts((current) => ({ ...current, [item.id]: value }))}
-                    placeholder="Write a comment..."
-                    placeholderTextColor={isDark ? darkColors.muted : colors.muted}
-                    style={[styles.commentInput, isDark && styles.commentInputDark]}
-                    returnKeyType="send"
-                    onSubmitEditing={() => handleComment(item.id)}
-                  />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Post comment"
-                    onPress={() => handleComment(item.id)}
-                    style={styles.commentButton}
-                  >
-                    <Text style={styles.commentButtonText}>Post</Text>
-                  </Pressable>
-                </View>
+                <CommentThread postId={item.id} isDark={isDark} />
               )}
             </Card>
           );
@@ -259,12 +280,13 @@ export default function Community() {
               placeholderTextColor={isDark ? darkColors.muted : colors.muted}
               style={[styles.postInput, isDark && styles.postInputDark]}
             />
+            {createPost.error ? <Text style={styles.errorText}>{errorMessage(createPost.error)}</Text> : null}
             <Pressable
               onPress={publishPost}
-              disabled={!postDraft.trim()}
-              style={[styles.publishButton, !postDraft.trim() && styles.publishButtonDisabled]}
+              disabled={!postDraft.trim() || createPost.isPending}
+              style={[styles.publishButton, (!postDraft.trim() || createPost.isPending) && styles.publishButtonDisabled]}
             >
-              <Text style={styles.publishButtonText}>Post and share</Text>
+              <Text style={styles.publishButtonText}>{createPost.isPending ? 'Posting…' : 'Post and share'}</Text>
             </Pressable>
           </View>
         </View>
@@ -294,6 +316,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 26, borderTopWidth: 1, borderColor: colors.border, marginTop: 14, paddingTop: 12 },
   actionText: { color: colors.textSecondary, fontSize: 13 },
   likedAction: { color: colors.danger },
+  commentItem: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 10 },
+  commentAuthor: { color: colors.textPrimary, fontWeight: '600' },
+  commentState: { paddingVertical: 8 },
+  errorText: { color: colors.danger, fontSize: 13, marginVertical: 8 },
   commentComposer: {
     flexDirection: 'row',
     alignItems: 'center',

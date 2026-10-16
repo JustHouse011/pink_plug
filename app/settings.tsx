@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   ActivityIndicator,
@@ -16,8 +16,12 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@/constants/colors';
-import { MOCK_USER } from '@/data/mockUser';
 import * as authService from '@/services/authService';
+import * as usersService from '@/services/users';
+import { errorMessage } from '@/services/api';
+import { useMe, useSettings, useUpdateMe, useUpdateSettings } from '@/hooks/useApi';
+import LoadState from '@/components/ui/LoadState';
+import type { User, UserSettings } from '@/types';
 import Avatar from '@/components/ui/Avatar';
 import Button from '@/components/ui/Button';
 import GlassCard from '@/components/ui/GlassCard';
@@ -42,29 +46,64 @@ export default function Settings() {
   const router = useRouter();
   const { isDark } = useTheme();
   const logout = useAppStore((state) => state.logout);
-  const shareLocation = useAppStore((state) => state.shareLocation);
-  const setLocationSharing = useAppStore((state) => state.setLocationSharing);
-  const [user, setUser] = useState(MOCK_USER);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
-  const [loginAlerts, setLoginAlerts] = useState(true);
-  const [profileVisible, setProfileVisible] = useState(true);
-  const [selfieVerified, setSelfieVerified] = useState(false);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [mutePushNotifications, setMutePushNotifications] = useState(false);
-  const [pushNewEvent, setPushNewEvent] = useState(true);
-  const [pushCommunityReview, setPushCommunityReview] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [muteEmailNotifications, setMuteEmailNotifications] = useState(false);
-  const [emailNewEvent, setEmailNewEvent] = useState(true);
-  const [emailCommunityReview, setEmailCommunityReview] = useState(true);
+  const meQuery = useMe();
+  const updateMe = useUpdateMe();
+  const settingsQuery = useSettings();
+  const updateSettings = useUpdateSettings();
+  const [user, setUser] = useState<User | null>(meQuery.data ?? null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Seed the editable draft once the profile has loaded.
+  useEffect(() => {
+    if (!user && meQuery.data) setUser(meQuery.data);
+  }, [meQuery.data, user]);
+
+  const settings = settingsQuery.data;
+  const setting = (key: keyof UserSettings) => settings?.[key] ?? false;
+  const patchSettings = (patch: Partial<Omit<UserSettings, 'twoFactorEnabled'>>) =>
+    updateSettings.mutate(patch, { onError: (error) => Alert.alert('Could not update settings', errorMessage(error)) });
+  const pushNotifications = setting('pushNotifications');
+  const mutePushNotifications = setting('mutePushNotifications');
+  const pushNewEvent = setting('pushNewEvent');
+  const pushCommunityReview = setting('pushCommunityReview');
+  const emailNotifications = setting('emailNotifications');
+  const muteEmailNotifications = setting('muteEmailNotifications');
+  const emailNewEvent = setting('emailNewEvent');
+  const emailCommunityReview = setting('emailCommunityReview');
+  const loginAlerts = setting('loginAlerts');
+  const profileVisible = setting('profileVisible');
+  const shareLocation = setting('shareLocation');
+  const verificationStatus = meQuery.data?.verificationStatus ?? 'unverified';
+  const selfieVerified = verificationStatus === 'verified';
   const [pushExpanded, setPushExpanded] = useState(false);
   const [emailExpanded, setEmailExpanded] = useState(false);
   const [selfieVerificationStep, setSelfieVerificationStep] = useState<'idle' | 'verifying' | 'success'>('idle');
+  const [deactivating, setDeactivating] = useState(false);
   const [deactivationPassword, setDeactivationPassword] = useState('');
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
 
-  const updateField = (field: keyof typeof user, value: string) => {
-    setUser((current) => ({ ...current, [field]: value }));
+  const updateField = (field: 'name' | 'handle' | 'city' | 'bio', value: string) => {
+    setUser((current) => (current ? { ...current, [field]: value } : current));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    try {
+      const saved = await updateMe.mutateAsync({
+        name: user.name.trim(),
+        handle: user.handle.trim(),
+        city: user.city.trim(),
+        bio: user.bio.trim(),
+      });
+      setUser(saved);
+      Alert.alert('Saved', 'Your profile has been updated.');
+    } catch (error) {
+      Alert.alert('Could not save profile', errorMessage(error));
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleLogout = () => {
@@ -80,29 +119,60 @@ export default function Settings() {
     ]);
   };
 
-  const confirmDeactivation = () => {
+  const confirmDeactivation = async () => {
     if (!deactivationPassword.trim()) {
       Alert.alert('Password required', 'Enter your password to deactivate your account.');
       return;
+    }
+
+    setDeactivating(true);
+    try {
+      await usersService.deactivateAccount(deactivationPassword);
+    } catch (error) {
+      Alert.alert('Could not deactivate', errorMessage(error));
+      return;
+    } finally {
+      setDeactivating(false);
     }
 
     setPasswordModalVisible(false);
     setDeactivationPassword('');
     Alert.alert(
       'Account deactivated',
-      'Your account is deactivated. You can log in again within 365 days to reactivate it, and all your data will be kept.',
+      'Your account is deactivated and you have been signed out on every device.',
       [{ text: 'OK', onPress: handleLogout }],
     );
   };
 
-  const updateProfileImage = (uri: string) => {
-    setUser((current) => ({
-      ...current,
-      profileImageUrl: uri,
-    }));
+  /** Uploads the picked photo, then attaches it to the profile. */
+  const updateProfileImage = async (uri: string) => {
+    setUploadingPhoto(true);
+    try {
+      const media = await usersService.uploadMedia(uri, 'profile_photo');
+      const saved = await updateMe.mutateAsync({ profileImageId: media.id });
+      setUser((current) => (current ? { ...current, profileImageUrl: saved.profileImageUrl } : saved));
+    } catch (error) {
+      Alert.alert('Could not upload photo', errorMessage(error));
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
-  const openWebImagePicker = (capture: 'user' | 'environment' | undefined, onComplete?: () => void) => {
+  /** Uploads a private selfie and submits it for review. Approval happens server-side. */
+  const submitSelfie = async (uri: string) => {
+    setSelfieVerificationStep('verifying');
+    try {
+      const media = await usersService.uploadMedia(uri, 'verification_selfie');
+      await usersService.submitSelfieVerification(media.id);
+      await meQuery.refetch();
+      setSelfieVerificationStep('success');
+    } catch (error) {
+      setSelfieVerificationStep('idle');
+      Alert.alert('Could not submit selfie', errorMessage(error));
+    }
+  };
+
+  const openWebImagePicker = (capture: 'user' | 'environment' | undefined, onPicked: (uri: string) => void = updateProfileImage) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -113,8 +183,7 @@ export default function Settings() {
       if (!file) return;
 
       const localUrl = URL.createObjectURL(file);
-      updateProfileImage(localUrl);
-      onComplete?.();
+      onPicked(localUrl);
       target.value = '';
     };
     input.click();
@@ -145,9 +214,9 @@ export default function Settings() {
     }
   };
 
-  const handleTakeSelfie = async (onComplete?: () => void) => {
+  const handleTakeSelfie = async (onPicked: (uri: string) => void = updateProfileImage) => {
     if (Platform.OS === 'web') {
-      openWebImagePicker('user', onComplete);
+      openWebImagePicker('user', onPicked);
       return;
     }
 
@@ -165,19 +234,20 @@ export default function Settings() {
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
-      updateProfileImage(result.assets[0].uri);
-      onComplete?.();
+      onPicked(result.assets[0].uri);
     }
   };
 
   const handleSelfieVerification = () => {
-    handleTakeSelfie(() => {
-      setSelfieVerificationStep('verifying');
-      setTimeout(() => {
-        setSelfieVerified(true);
-        setSelfieVerificationStep('success');
-      }, 1600);
-    });
+    if (verificationStatus === 'verified') {
+      Alert.alert('Verified', 'Your identity has already been verified.');
+      return;
+    }
+    if (verificationStatus === 'pending') {
+      Alert.alert('In review', 'Your selfie has been submitted and is waiting for review.');
+      return;
+    }
+    handleTakeSelfie(submitSelfie);
   };
 
   const pickPhotoOptions = () => {
@@ -187,6 +257,14 @@ export default function Settings() {
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
+
+  if (!user) {
+    return (
+      <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
+        <LoadState loading={meQuery.isPending} error={meQuery.error} onRetry={() => meQuery.refetch()} style={styles.content} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
@@ -205,8 +283,8 @@ export default function Settings() {
             onPress={pickPhotoOptions}
             style={styles.uploadPhotoButton}
           >
-            <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.uploadPhotoText}>Upload photo</Text>
+            {uploadingPhoto ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="camera-outline" size={18} color="#FFFFFF" />}
+            <Text style={styles.uploadPhotoText}>{uploadingPhoto ? 'Uploading…' : 'Upload photo'}</Text>
           </Pressable>
         </View>
 
@@ -223,17 +301,17 @@ export default function Settings() {
           <Text style={[styles.label, isDark && styles.darkText]}>Email</Text>
           <TextInput
             value={user.email}
+            editable={false}
             keyboardType="email-address"
-            onChangeText={(value) => updateField('email', value)}
-            style={[styles.input, isDark && styles.inputDark]}
+            style={[styles.input, styles.inputReadOnly, isDark && styles.inputDark]}
           />
 
           <Text style={[styles.label, isDark && styles.darkText]}>Phone number</Text>
           <TextInput
             value={user.phone}
+            editable={false}
             keyboardType="phone-pad"
-            onChangeText={(value) => updateField('phone', value)}
-            style={[styles.input, isDark && styles.inputDark]}
+            style={[styles.input, styles.inputReadOnly, isDark && styles.inputDark]}
           />
 
           <Text style={[styles.label, isDark && styles.darkText]}>Username</Text>
@@ -276,28 +354,28 @@ export default function Settings() {
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Enable all notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive important updates and activity alerts</Text>
               </View>
-              <SettingsSwitch value={pushNotifications} onValueChange={(value) => { setPushNotifications(value); setPushNewEvent(value); setPushCommunityReview(value); if (value) setMutePushNotifications(false); }} />
+              <SettingsSwitch value={pushNotifications} onValueChange={(value) => patchSettings({ pushNotifications: value, pushNewEvent: value, pushCommunityReview: value, ...(value ? { mutePushNotifications: false } : {}) })} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Mute notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Temporarily silence push notifications</Text>
               </View>
-              <SettingsSwitch value={mutePushNotifications} onValueChange={(value) => { setMutePushNotifications(value); if (value) setPushNotifications(false); }} />
+              <SettingsSwitch value={mutePushNotifications} onValueChange={(value) => patchSettings({ mutePushNotifications: value, ...(value ? { pushNotifications: false } : {}) })} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New event</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Get notified about events near you</Text>
               </View>
-              <SettingsSwitch value={pushNewEvent} onValueChange={setPushNewEvent} />
+              <SettingsSwitch value={pushNewEvent} onValueChange={(value) => patchSettings({ pushNewEvent: value })} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New community review</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Get notified when places receive reviews</Text>
               </View>
-              <SettingsSwitch value={pushCommunityReview} onValueChange={setPushCommunityReview} />
+              <SettingsSwitch value={pushCommunityReview} onValueChange={(value) => patchSettings({ pushCommunityReview: value })} />
             </View>
           </View>}
 
@@ -315,28 +393,28 @@ export default function Settings() {
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Enable all notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive important updates by email</Text>
               </View>
-              <SettingsSwitch value={emailNotifications} onValueChange={(value) => { setEmailNotifications(value); setEmailNewEvent(value); setEmailCommunityReview(value); if (value) setMuteEmailNotifications(false); }} />
+              <SettingsSwitch value={emailNotifications} onValueChange={(value) => patchSettings({ emailNotifications: value, emailNewEvent: value, emailCommunityReview: value, ...(value ? { muteEmailNotifications: false } : {}) })} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>Mute notifications</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Temporarily silence email notifications</Text>
               </View>
-              <SettingsSwitch value={muteEmailNotifications} onValueChange={(value) => { setMuteEmailNotifications(value); if (value) setEmailNotifications(false); }} />
+              <SettingsSwitch value={muteEmailNotifications} onValueChange={(value) => patchSettings({ muteEmailNotifications: value, ...(value ? { emailNotifications: false } : {}) })} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New event</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive event updates by email</Text>
               </View>
-              <SettingsSwitch value={emailNewEvent} onValueChange={setEmailNewEvent} />
+              <SettingsSwitch value={emailNewEvent} onValueChange={(value) => patchSettings({ emailNewEvent: value })} />
             </View>
             <View style={styles.rowItem}>
               <View style={styles.rowText}>
                 <Text style={[styles.rowLabel, isDark && styles.darkText]}>New community review</Text>
                 <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Receive review updates by email</Text>
               </View>
-              <SettingsSwitch value={emailCommunityReview} onValueChange={setEmailCommunityReview} />
+              <SettingsSwitch value={emailCommunityReview} onValueChange={(value) => patchSettings({ emailCommunityReview: value })} />
             </View>
           </View>}
         </GlassCard>
@@ -347,9 +425,9 @@ export default function Settings() {
           <View style={styles.rowItem}>
             <View style={styles.rowText}>
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Two-factor authentication</Text>
-              <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Add an extra verification step</Text>
+              <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Always on: every sign-in needs an emailed code</Text>
             </View>
-            <SettingsSwitch value={twoFactorEnabled} onValueChange={setTwoFactorEnabled} />
+            <SettingsSwitch value onValueChange={() => Alert.alert('Always on', 'Every sign-in requires a one-time code sent to your email, so this cannot be turned off.')} />
           </View>
 
           <View style={styles.rowItem}>
@@ -357,7 +435,7 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Login alerts</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Get notified about new sign-ins</Text>
             </View>
-            <SettingsSwitch value={loginAlerts} onValueChange={setLoginAlerts} />
+            <SettingsSwitch value={loginAlerts} onValueChange={(value) => patchSettings({ loginAlerts: value })} />
           </View>
 
           <View style={styles.rowItem}>
@@ -365,7 +443,7 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Profile visibility</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>Show your profile to other users</Text>
             </View>
-            <SettingsSwitch value={profileVisible} onValueChange={setProfileVisible} />
+            <SettingsSwitch value={profileVisible} onValueChange={(value) => patchSettings({ profileVisible: value })} />
           </View>
 
           <View style={styles.rowItem}>
@@ -373,14 +451,14 @@ export default function Settings() {
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Location sharing</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>{shareLocation ? 'Live location is shared with route partners' : 'Share your live location when using route help'}</Text>
             </View>
-            <SettingsSwitch value={shareLocation} onValueChange={setLocationSharing} />
+            <SettingsSwitch value={shareLocation} onValueChange={(value) => patchSettings({ shareLocation: value })} />
           </View>
 
           <View style={styles.verificationRow}>
             <View style={styles.rowText}>
               <Text style={[styles.rowLabel, isDark && styles.darkText]}>Selfie verification</Text>
               <Text style={[styles.rowSub, isDark && styles.darkSecondaryText]}>
-                {selfieVerified ? 'Verified for this session' : 'Verify your identity with a quick selfie'}
+                {selfieVerified ? 'Your identity is verified' : verificationStatus === 'pending' ? 'Submitted, waiting for review' : 'Verify your identity with a quick selfie'}
               </Text>
             </View>
             <Pressable
@@ -413,7 +491,7 @@ export default function Settings() {
 
         <GlassCard style={[styles.section, styles.accountSection, isDark && styles.sectionDark]}>
           <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Account actions</Text>
-          <Button label="Save changes" onPress={() => {}} style={styles.accountButton} />
+          <Button label={savingProfile ? 'Saving…' : 'Save changes'} onPress={handleSaveProfile} disabled={savingProfile} style={styles.accountButton} />
           <View style={styles.actionSpacer} />
           <Button label="Log out" onPress={handleLogout} variant="purple" style={styles.accountButton} />
           <View style={styles.actionSpacer} />
@@ -434,16 +512,16 @@ export default function Settings() {
             {selfieVerificationStep === 'verifying' ? (
               <>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={[styles.modalTitle, styles.verificationTitle, isDark && styles.darkText]}>Verifying</Text>
-                <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>We’re checking your selfie. This will only take a moment.</Text>
+                <Text style={[styles.modalTitle, styles.verificationTitle, isDark && styles.darkText]}>Uploading</Text>
+                <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>We’re securely uploading your selfie.</Text>
               </>
             ) : (
               <>
                 <View style={styles.successIcon}>
                   <Text style={styles.successIconText}>✓</Text>
                 </View>
-                <Text style={[styles.modalTitle, styles.verificationTitle, isDark && styles.darkText]}>Selfie verified</Text>
-                <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>Your identity was verified successfully for this session.</Text>
+                <Text style={[styles.modalTitle, styles.verificationTitle, isDark && styles.darkText]}>Selfie submitted</Text>
+                <Text style={[styles.modalCopy, isDark && styles.darkSecondaryText]}>Your selfie is private and will be reviewed. Your profile shows as verified once it is approved.</Text>
                 <Button label="Done" onPress={() => setSelfieVerificationStep('idle')} style={styles.doneButton} />
               </>
             )}
@@ -467,7 +545,7 @@ export default function Settings() {
             />
             <View style={styles.modalActions}>
               <Button label="Cancel" onPress={() => setPasswordModalVisible(false)} variant="secondary" style={styles.modalButton} />
-              <Button label="Deactivate" onPress={confirmDeactivation} variant="danger" style={styles.modalButton} />
+              <Button label={deactivating ? 'Deactivating…' : 'Deactivate'} onPress={confirmDeactivation} disabled={deactivating} variant="danger" style={styles.modalButton} />
             </View>
           </View>
         </View>
@@ -477,6 +555,7 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
+  inputReadOnly: { opacity: 0.6 },
   safe: { flex: 1, backgroundColor: 'transparent' },
   safeDark: { backgroundColor: 'transparent' },
   darkText: { color: darkColors.textPrimary },

@@ -1,11 +1,12 @@
-﻿import { memo, useMemo, useState } from 'react';
+﻿import { memo, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { FlatList, ScrollView, Text, TextInput, Pressable, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors, darkColors } from '@/constants/colors';
-import { MOCK_USER } from '@/data/mockUser';
-import { DIRECTORY_CATEGORIES, DIRECTORY_RESOURCES } from '@/data/directoryData';
+import { useAppStore } from '@/store/useAppStore';
+import { useDirectory, useDirectoryCategories } from '@/hooks/useApi';
+import LoadState from '@/components/ui/LoadState';
 import type { DirectoryResource } from '@/types';
 import Card from '@/components/ui/Card';
 import GlassCard from '@/components/ui/GlassCard';
@@ -15,10 +16,15 @@ import Chip from '@/components/ui/Chip';
 import { useTheme } from '@/context/ThemeProvider';
 import { routes } from '@/navigation/routes';
 
-const searchableResources = DIRECTORY_RESOURCES.map((resource) => ({
-  resource,
-  searchText: `${resource.name} ${resource.category} ${resource.city} ${resource.area} ${resource.description}`.toLowerCase(),
-}));
+/** Waits for typing to pause before searching on the server. */
+function useDebounced<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 const DirectoryResourceCard = memo(function DirectoryResourceCard({ resource, isDark }: { resource: DirectoryResource; isDark: boolean }) {
   return (
@@ -44,15 +50,16 @@ export default function Directory() {
   const { isDark } = useTheme();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const filteredResources = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return searchableResources
-      .filter(({ resource, searchText }) => {
-        const matchesCategory = selectedCategory === 'All' || resource.category === selectedCategory;
-        return matchesCategory && (!normalizedQuery || searchText.includes(normalizedQuery));
-      })
-      .map(({ resource }) => resource);
-  }, [query, selectedCategory]);
+  const userCity = useAppStore((state) => state.user?.city);
+  const search = useDebounced(query.trim());
+  const categoriesQuery = useDirectoryCategories();
+  const categories = ['All', ...(categoriesQuery.data ?? []).map((item) => item.value)];
+  const resourcesQuery = useDirectory({
+    search: search || undefined,
+    category: selectedCategory === 'All' ? undefined : selectedCategory,
+  });
+  const filteredResources = resourcesQuery.data?.items ?? [];
+  const totalResults = resourcesQuery.data?.meta.total ?? 0;
 
   const header = (
     <>
@@ -77,18 +84,18 @@ export default function Directory() {
         )}
       </GlassCard>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-        {DIRECTORY_CATEGORIES.map((category) => (
+        {categories.map((category) => (
           <Chip key={category} label={category} active={selectedCategory === category} onPress={() => setSelectedCategory(category)} />
         ))}
       </ScrollView>
       <Card style={styles.summary}>
         <Text style={styles.summaryLabel}>Your community</Text>
-        <Text style={[styles.summaryTitle, isDark && styles.darkText]}>{MOCK_USER.city}</Text>
-        <Text style={[styles.summaryCopy, isDark && styles.darkSecondaryText]}>{filteredResources.length} resources match your search across healthcare, support, services and social spaces.</Text>
+        <Text style={[styles.summaryTitle, isDark && styles.darkText]}>{userCity || 'South Africa'}</Text>
+        <Text style={[styles.summaryCopy, isDark && styles.darkSecondaryText]}>{totalResults} resources match your search across healthcare, support, services and social spaces.</Text>
       </Card>
       <View style={styles.resultsHeader}>
         <Text style={[styles.section, isDark && styles.darkText]}>Community resources</Text>
-        <Text style={[styles.resultCount, isDark && styles.darkSecondaryText]}>{filteredResources.length} results</Text>
+        <Text style={[styles.resultCount, isDark && styles.darkSecondaryText]}>{totalResults} results</Text>
       </View>
     </>
   );
@@ -100,7 +107,7 @@ export default function Directory() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <DirectoryResourceCard resource={item} isDark={isDark} />}
         ListHeaderComponent={header}
-        ListEmptyComponent={<Card style={styles.emptyCard}><Ionicons name="search-outline" size={28} color={colors.primary} /><Text style={[styles.emptyTitle, isDark && styles.darkText]}>No matching resources</Text><Text style={[styles.emptyCopy, isDark && styles.darkSecondaryText]}>Try another search term or choose All categories.</Text></Card>}
+        ListEmptyComponent={resourcesQuery.isPending || resourcesQuery.error ? <LoadState loading={resourcesQuery.isPending} error={resourcesQuery.error} onRetry={() => resourcesQuery.refetch()} /> : <Card style={styles.emptyCard}><Ionicons name="search-outline" size={28} color={colors.primary} /><Text style={[styles.emptyTitle, isDark && styles.darkText]}>No matching resources</Text><Text style={[styles.emptyCopy, isDark && styles.darkSecondaryText]}>Try another search term or choose All categories.</Text></Card>}
         ListFooterComponent={<Button label="Explore nearby spaces" onPress={() => router.push(routes.explore)} />}
         contentContainerStyle={styles.content}
         initialNumToRender={8}

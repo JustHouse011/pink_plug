@@ -1,9 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import type { Event, Place, Review, Session, Tab, TransitMode, User, Waypoint } from '@/types';
-
-type ReviewTarget = 'event' | 'place';
+import type { Event, Place, Session, Tab, TransitMode, User, Waypoint } from '@/types';
 
 interface AppState {
   hasHydrated: boolean;
@@ -20,7 +18,6 @@ interface AppState {
   transitMode: TransitMode;
   selectedPlace: Place | null;
   selectedEvent: Event | null;
-  reviewCache: Record<string, Review[]>;
   completeOnboarding: () => void;
   login: (user: User, session: Session) => void;
   logout: () => void;
@@ -36,11 +33,13 @@ interface AppState {
   setTransitMode: (mode: TransitMode) => void;
   selectPlace: (place: Place) => void;
   selectEvent: (event: Event) => void;
-  addReview: (target: ReviewTarget, targetId: string, review: { rating: number; headline: string; comment: string }) => void;
   setHasHydrated: (value: boolean) => void;
 }
 
 const STORAGE_KEY = 'pink-plug-store';
+
+// Trusted contacts now live on the server; drop the old device-local list (and its demo entries).
+AsyncStorage.removeItem('pink-plug-emergency-contacts').catch(() => undefined);
 
 const resetAuthState = (): Pick<AppState, 'activeTab' | 'isAuthenticated' | 'shareLocation' | 'headerMenuVisible' | 'showNotifications' | 'onboardingComplete'> => ({
   onboardingComplete: false,
@@ -66,7 +65,6 @@ export const useAppStore = create<AppState>((set) => ({
   transitMode: 'walking',
   selectedPlace: null,
   selectedEvent: null,
-  reviewCache: {},
   completeOnboarding: () => set({ onboardingComplete: true }),
   login: (user, session) => set({ isAuthenticated: true, isLoggingOut: false, user, session }),
   logout: () => {
@@ -80,7 +78,6 @@ export const useAppStore = create<AppState>((set) => ({
       transitMode: 'walking',
       selectedPlace: null,
       selectedEvent: null,
-      reviewCache: {},
     }));
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   },
@@ -96,31 +93,10 @@ export const useAppStore = create<AppState>((set) => ({
   setTransitMode: (transitMode) => set({ transitMode }),
   selectPlace: (selectedPlace) => set({ selectedPlace }),
   selectEvent: (selectedEvent) => set({ selectedEvent }),
-  addReview: (target, targetId, review) => set((state) => {
-    const key = `${target}:${targetId}`;
-    const existing = state.reviewCache[key] ?? [];
-
-    const nextReview: Review = {
-      id: `review-${Date.now()}`,
-      user: 'You',
-      avatar: '⭐',
-      rating: review.rating,
-      headline: review.headline,
-      comment: review.comment,
-      timeAgo: 'Just now',
-    };
-
-    return {
-      reviewCache: {
-        ...state.reviewCache,
-        [key]: [nextReview, ...existing],
-      },
-    };
-  }),
   setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 }));
 
-const persistedKeys = ['onboardingComplete', 'isAuthenticated', 'shareLocation', 'waypoints', 'transitMode', 'reviewCache'] as const;
+const persistedKeys = ['onboardingComplete', 'isAuthenticated', 'shareLocation', 'waypoints', 'transitMode'] as const;
 type PersistedState = Pick<AppState, (typeof persistedKeys)[number]>;
 
 AsyncStorage.getItem(STORAGE_KEY).then((stored) => {

@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { firebaseAuth } from '@/lib/firebaseClient';
+import type { PageMeta, Paged } from '@/types';
 
 /**
  * Thin client for pink_plug_backend's REST API (docs/API-SPECIFICATION.md,
@@ -61,6 +62,8 @@ export type AuthRequirement = 'none' | 'optional' | 'required';
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
+  /** Multipart body (media uploads). Mutually exclusive with `body`; fetch sets the boundary header. */
+  formData?: FormData;
   query?: Record<string, string | number | boolean | undefined>;
   /** Whether to attach `Authorization: Bearer <idToken>`. Defaults to 'required'. */
   auth?: AuthRequirement;
@@ -91,7 +94,7 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 
 /** Calls the API and returns `data`/`meta` on success, or throws ApiError/ApiNetworkError. */
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
-  const { method = 'GET', body, query, auth = 'required', idempotent = false } = options;
+  const { method = 'GET', body, formData, query, auth = 'required', idempotent = false } = options;
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -106,7 +109,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     response = await fetch(buildUrl(path, query), {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
   } catch (cause) {
     throw new ApiNetworkError(cause);
@@ -128,6 +131,33 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError(response.status, json.error);
   }
   return { data: json.data, meta: json.meta };
+}
+
+/** Calls a list endpoint and returns its items with pagination meta. */
+export async function apiList<T>(path: string, options?: RequestOptions): Promise<Paged<T>> {
+  const { data, meta } = await apiRequest<T[]>(path, options);
+  const fallback: PageMeta = { page: 1, limit: data.length, total: data.length, totalPages: 1 };
+  return { items: data, meta: { ...fallback, ...(meta as Partial<PageMeta> | undefined) } };
+}
+
+/** Fetches every page of a list endpoint (for small catalogues that the UI filters locally). */
+export async function apiListAll<T>(path: string, options: RequestOptions = {}): Promise<T[]> {
+  const items: T[] = [];
+  for (let page = 1; ; page += 1) {
+    const result = await apiList<T>(path, { ...options, query: { ...options.query, page, limit: 100 } });
+    items.push(...result.items);
+    if (page >= result.meta.totalPages || result.items.length === 0) return items;
+  }
+}
+
+/** Human-readable message for any error thrown by the API client. */
+export function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  if (error instanceof ApiError) {
+    const firstField = error.fields && Object.values(error.fields).flat()[0];
+    return firstField ?? error.message ?? fallback;
+  }
+  if (error instanceof ApiNetworkError) return error.message;
+  return fallback;
 }
 
 /** Convenience wrapper returning only `data`, for call sites that don't need `meta`. */

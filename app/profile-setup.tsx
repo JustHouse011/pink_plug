@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,7 +18,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeProvider';
 import { colors, darkColors } from '@/constants/colors';
+import * as ImagePicker from 'expo-image-picker';
 import { useAppStore } from '@/store/useAppStore';
+import { useContactMutations, useUpdateMe, useUpdateSettings } from '@/hooks/useApi';
+import * as usersService from '@/services/users';
+import { ApiError, errorMessage } from '@/services/api';
+import { normalizePhoneNumber } from '@/services/contacts';
 
 const interestOptions = ['Community', 'Travel', 'Nightlife', 'Wellness', 'Events', 'Food', 'Music', 'Outdoor'];
 
@@ -30,7 +37,13 @@ export default function ProfileSetup() {
   const [locationMethod, setLocationMethod] = useState<'manual' | 'live'>('manual');
   const [interests, setInterests] = useState<string[]>(['Community', 'Events']);
   const [contacts, setContacts] = useState([{ name: '', phone: '' }]);
-  const [profileImage, setProfileImage] = useState<string | null>('Bongz');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [profileImageId, setProfileImageId] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const updateMe = useUpdateMe();
+  const updateSettings = useUpdateSettings();
+  const { add: addTrustedContact } = useContactMutations();
 
   const steps = useMemo(
     () => [
@@ -69,7 +82,75 @@ export default function ProfileSetup() {
     if (currentStep === 1) return interests.length > 0;
     if (currentStep === 2) return true;
     if (currentStep === 3) return contacts.some((contact) => contact.name.trim() || contact.phone.trim());
-    return !!profileImage;
+    // The photo is optional, but an upload must finish before moving on.
+    return !uploadingPhoto;
+  };
+
+  const pickProfilePhoto = async () => {
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photos to upload a profile picture.');
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+    const uri = result.canceled ? undefined : result.assets[0]?.uri;
+    if (!uri) return;
+
+    setProfileImage(uri);
+    setUploadingPhoto(true);
+    try {
+      const media = await usersService.uploadMedia(uri, 'profile_photo');
+      setProfileImageId(media.id);
+    } catch (error) {
+      setProfileImage(null);
+      Alert.alert('Could not upload photo', errorMessage(error));
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  /** Persists every step: profile fields, the location preference and trusted contacts. */
+  const finishSetup = async () => {
+    setFinishing(true);
+    try {
+      const city = locationMethod === 'manual' ? location.trim().replace(/,\s*South Africa$/i, '') : undefined;
+      await updateMe.mutateAsync({
+        ...(city ? { city } : {}),
+        interests,
+        ...(profileImageId ? { profileImageId } : {}),
+        profileSetupComplete: true,
+      });
+      await updateSettings.mutateAsync({ shareLocation });
+
+      const failed: string[] = [];
+      for (const contact of contacts) {
+        const name = contact.name.trim();
+        const phone = normalizePhoneNumber(contact.phone);
+        if (!name || !phone) {
+          if (name || contact.phone.trim()) failed.push(name || contact.phone.trim());
+          continue;
+        }
+        try {
+          await addTrustedContact.mutateAsync({ name, phone, relationship: 'Trusted contact' });
+        } catch (error) {
+          if (!(error instanceof ApiError && error.code === 'DUPLICATE_CONTACT')) failed.push(name);
+        }
+      }
+
+      router.replace('/(tabs)/home');
+      Alert.alert(
+        'Profile ready',
+        failed.length
+          ? `Your profile is set up. These contacts could not be added: ${failed.join(', ')}. You can add them from Emergency Contacts.`
+          : 'Your Pink Plug profile is set up and you are all set to explore.',
+      );
+    } catch (error) {
+      Alert.alert('Could not finish setup', errorMessage(error));
+    } finally {
+      setFinishing(false);
+    }
   };
 
   const nextStep = () => {
@@ -83,8 +164,7 @@ export default function ProfileSetup() {
       return;
     }
 
-    Alert.alert('Profile ready', 'Your Pink Plug profile is set up and you are all set to explore.');
-    router.replace('/(tabs)/home');
+    finishSetup();
   };
 
   const previousStep = () => {
@@ -237,26 +317,28 @@ export default function ProfileSetup() {
             <View style={styles.card}>
               <Text style={styles.label}>Upload your profile pic</Text>
               <View style={styles.avatarWrap}>
-                <Image source={require('@/imports/Bongz.png')} style={styles.avatar} contentFit="cover" />
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={styles.avatar} contentFit="cover" />
+                ) : (
+                  <Ionicons name="person-circle-outline" size={96} color={colors.primary} />
+                )}
               </View>
 
-              <Pressable
-                onPress={() => setProfileImage('Bongz')}
-                style={styles.secondaryButton}
-              >
-                <Text style={styles.secondaryText}>Use Bongz profile photo</Text>
+              <Pressable onPress={pickProfilePhoto} disabled={uploadingPhoto} style={styles.secondaryButton}>
+                {uploadingPhoto ? <ActivityIndicator color={colors.primary} /> : null}
+                <Text style={styles.secondaryText}>{uploadingPhoto ? 'Uploading…' : profileImage ? 'Choose a different photo' : 'Choose a photo'}</Text>
               </Pressable>
             </View>
           )}
 
-          <Pressable onPress={nextStep} style={styles.primaryButton}>
+          <Pressable onPress={nextStep} disabled={finishing} style={[styles.primaryButton, finishing && { opacity: 0.7 }]}>
             <LinearGradient
               colors={[colors.primary, '#C432D9']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.buttonGradient}
             >
-              <Text style={styles.primaryText}>{currentStep === totalSteps - 1 ? 'Finish setup' : 'Continue'}</Text>
+              <Text style={styles.primaryText}>{finishing ? 'Saving…' : currentStep === totalSteps - 1 ? (profileImage ? 'Finish setup' : 'Skip photo and finish') : 'Continue'}</Text>
             </LinearGradient>
           </Pressable>
         </ScrollView>

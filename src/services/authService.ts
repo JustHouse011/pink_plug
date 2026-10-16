@@ -6,7 +6,7 @@ import type { AuthChallenge, Session, User, VerifyOtpResult } from '@/types';
 /**
  * Real implementation of the two-step auth flow in pink_plug_backend/README.md
  * ("How authentication works") and docs/API-SPECIFICATION.md section 6 (E01-E14).
- * Replaces src/services/mockOtpService.ts, which this module supersedes.
+ * Server-backed; there is no local OTP fallback.
  */
 
 export interface RegisterInput {

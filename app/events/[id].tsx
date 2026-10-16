@@ -6,28 +6,63 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { colors, darkColors } from '@/constants/colors';
-import { MOCK_EVENTS } from '@/data/mockData';
+import LoadState from '@/components/ui/LoadState';
+import ReviewSection from '@/components/reviews/ReviewSection';
+import { useCreateReview, useEvent, useRegisterForEvent } from '@/hooks/useApi';
+import { ApiError, errorMessage } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 import { useTheme } from '@/context/ThemeProvider';
 
 export default function EventDetail() {
   const router = useRouter();
   const { isDark } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const event = MOCK_EVENTS.find((item) => item.id === id) ?? MOCK_EVENTS[0];
-  const [registration, setRegistration] = useState({ name: '', email: '', phone: '' });
+  const user = useAppStore((state) => state.user);
+  const eventQuery = useEvent(id);
+  const register = useRegisterForEvent(id ?? '');
+  const createReview = useCreateReview('event', id ?? '');
+  const [registration, setRegistration] = useState({ name: user?.name ?? '', email: user?.email ?? '', phone: user?.phone ?? '' });
   const [registrationSubmitted, setRegistrationSubmitted] = useState(false);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const event = eventQuery.data;
+
+  const back = (
+    <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
+      <Text style={styles.back}>‹  Back</Text>
+    </Pressable>
+  );
+
+  if (!event) {
+    return (
+      <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
+        <View style={styles.content}>
+          {back}
+          <LoadState loading={eventQuery.isPending} error={eventQuery.error} onRetry={() => eventQuery.refetch()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleRegister = () => {
     if (!registration.name.trim() || !registration.email.trim() || !registration.phone.trim()) return;
-    setRegistrationSubmitted(true);
+    setRegistrationError(null);
+    register.mutate(
+      { name: registration.name.trim(), email: registration.email.trim(), phone: registration.phone.trim() },
+      {
+        onSuccess: () => setRegistrationSubmitted(true),
+        onError: (error) => {
+          // Already registered (409) is still a success from the member's point of view.
+          if (error instanceof ApiError && error.code === 'CONFLICT') setRegistrationSubmitted(true);
+          else setRegistrationError(errorMessage(error));
+        },
+      },
+    );
   };
 
   return (
     <SafeAreaView style={[styles.safe, isDark && styles.safeDark]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
-          <Text style={styles.back}>‹  Back</Text>
-        </Pressable>
+        {back}
         <Image
           source={typeof event.imageUrl === 'string' ? { uri: event.imageUrl } : event.imageUrl}
           style={styles.hero}
@@ -77,13 +112,22 @@ export default function EventDetail() {
               keyboardType="phone-pad"
               style={[styles.registrationInput, isDark && styles.registrationInputDark]}
             />
-            <Button label="Register now" onPress={handleRegister} disabled={!registration.name.trim() || !registration.email.trim() || !registration.phone.trim()} />
+            {registrationError ? <Text style={styles.registrationError}>{registrationError}</Text> : null}
+            <Button label={register.isPending ? 'Registering…' : 'Register now'} onPress={handleRegister} disabled={register.isPending || !registration.name.trim() || !registration.email.trim() || !registration.phone.trim()} />
           </View>
         )}
 
         <Text style={[styles.section, isDark && styles.darkText]}>Hosted by {event.organiser}</Text>
         <Text style={[styles.copy, isDark && styles.darkSecondaryText]}>{event.attendees.toLocaleString()} people are attending.</Text>
 
+        <ReviewSection
+          reviews={event.reviews}
+          rating={event.rating}
+          reviewCount={event.reviewCount}
+          onSubmit={async (review) => { await createReview.mutateAsync(review); }}
+        />
+
+        <View style={{ height: 20 }} />
         <Button
           label="Open event directions"
           onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(event.address)}`)}
@@ -109,5 +153,6 @@ const styles = StyleSheet.create({
   registrationForm: { gap: 10, marginTop: 4 },
   registrationInput: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: colors.textPrimary, fontSize: 14 },
   registrationInputDark: { backgroundColor: darkColors.input, borderColor: darkColors.border, color: darkColors.textPrimary },
+  registrationError: { color: colors.danger, fontSize: 13 },
   registrationSuccess: { color: colors.primary, fontSize: 14, lineHeight: 21, fontWeight: '600', marginTop: 4 },
 });

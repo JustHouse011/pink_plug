@@ -15,7 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTabScreenLayout } from '@/layout/tabLayout';
 import { useRouter } from 'expo-router';
 import { colors, darkColors } from '@/constants/colors';
-import { MOCK_PLACES } from '@/data/mockData';
+import { usePlaces, useTrustedContacts } from '@/hooks/useApi';
+import * as trips from '@/services/trips';
 import GlassCard from '@/components/ui/GlassCard';
 import Button from '@/components/ui/Button';
 import Chip from '@/components/ui/Chip';
@@ -24,7 +25,6 @@ import MapControlButton from '@/components/route/MapControlButton';
 import PlaceMapSheet from '@/components/route/PlaceMapSheet';
 import { useTheme } from '@/context/ThemeProvider';
 import { useAppStore } from '@/store/useAppStore';
-import { useEmergencyContactsStore } from '@/store/useEmergencyContactsStore';
 import type { Place } from '@/types';
 import { placeRoute } from '@/navigation/routes';
 import { getRouteMetrics, getRoutePoints } from '@/components/route/routeGeometry';
@@ -81,12 +81,14 @@ export default function Route() {
   const remove = useAppStore((state) => state.removeWaypoint);
   const mode = useAppStore((state) => state.transitMode);
   const setMode = useAppStore((state) => state.setTransitMode);
-  const contacts = useEmergencyContactsStore((state) => state.contacts);
+  const contacts = useTrustedContacts().data ?? [];
   const { isDark } = useTheme();
   const [checkedInPlace, setCheckedInPlace] = useState<Place | null>(null);
   const [checkedInAt, setCheckedInAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [routeStartedAt, setRouteStartedAt] = useState<number | null>(null);
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
+  const placesQuery = usePlaces();
   const [routeElapsedSeconds, setRouteElapsedSeconds] = useState(0);
   const [showDeparturePrompt, setShowDeparturePrompt] = useState(false);
   const [addRouteModalVisible, setAddRouteModalVisible] = useState(false);
@@ -122,7 +124,9 @@ export default function Route() {
     setCheckedInAt(Date.now());
     setElapsedSeconds(0);
     setSelectedPlaceId(place.id);
-    Alert.alert('Checked in', `Your mock location pin is set to ${place.name}.`);
+    trips.createCheckIn({ placeId: place.id, routeId: activeRouteId ?? undefined })
+      .then(() => Alert.alert('Checked in', `You checked in at ${place.name}.`))
+      .catch(() => Alert.alert('Checked in', `You checked in at ${place.name}, but it couldn't be saved to your account.`));
   };
 
   const openShareModal = (payload: SharePayload) => {
@@ -277,9 +281,17 @@ export default function Route() {
     setDepartureTime(null);
     setShowDeparturePrompt(false);
     Alert.alert('Route started', `You are now in transit to ${destination.name}.`);
+
+    // Record the trip server-side; the local route keeps working if this fails.
+    const placeIds = Array.from(new Set([...waypoints.map((waypoint) => waypoint.place.id), destination.id])).slice(0, 25);
+    trips.createRoute({ mode, placeIds, selectedPlaceId: destination.id, status: 'active' })
+      .then((route) => setActiveRouteId(route.id))
+      .catch(() => setActiveRouteId(null));
   };
 
   const endTrip = () => {
+    if (activeRouteId) trips.updateRoute(activeRouteId, { status: 'ended' }).catch(() => undefined);
+    setActiveRouteId(null);
     setRouteStartedAt(null);
     setRouteElapsedSeconds(0);
     setLeavingNow(false);
@@ -306,8 +318,8 @@ export default function Route() {
   };
 
   const dataPlaces = useMemo(() =>
-    MOCK_PLACES.filter((place) => Number.isFinite(place.coords?.latitude) && Number.isFinite(place.coords?.longitude)),
-    [],
+    (placesQuery.data ?? []).filter((place) => Number.isFinite(place.coords?.latitude) && Number.isFinite(place.coords?.longitude)),
+    [placesQuery.data],
   );
 
   const handleScheduleDeparture = () => {
@@ -355,13 +367,13 @@ export default function Route() {
   const addRouteCandidates = useMemo(() => {
     const normalizedQuery = addRouteQuery.trim().toLowerCase();
 
-    return MOCK_PLACES.filter((place) => {
+    return dataPlaces.filter((place) => {
       if (!normalizedQuery) return true;
 
       return [place.name, place.address, place.city, place.category]
         .some((value) => value.toLowerCase().includes(normalizedQuery));
     }).slice(0, 8);
-  }, [addRouteQuery]);
+  }, [addRouteQuery, dataPlaces]);
   const routeMetrics = useMemo(
     () => getRouteMetrics(mode, getRoutePoints(waypoints, visibleMarkers)),
     [mode, visibleMarkers, waypoints],

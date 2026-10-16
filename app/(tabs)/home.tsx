@@ -1,4 +1,4 @@
-﻿import { useState } from "react"
+﻿import { useEffect, useState } from "react"
 
 import {
   Alert,
@@ -37,8 +37,18 @@ import AnimatedList from "@/components/motion/AnimatedList"
 
 import { colors, darkColors } from "@/constants/colors"
 
-import { MOCK_EVENTS, MOCK_PLACES } from "@/data/mockData"
-import { MOCK_USER } from '@/data/mockUser'
+import {
+  useAddComment,
+  useComments,
+  useEvents,
+  useFeed,
+  useMarkAllNotificationsRead,
+  useNotifications,
+  usePlaces,
+  useSavedPlaces,
+  useToggleSavedPlace,
+} from '@/hooks/useApi'
+import LoadState from '@/components/ui/LoadState'
 import { eventRoute, placeRoute, routes } from '@/navigation/routes'
 
 import { useAppStore } from "@/store/useAppStore"
@@ -64,24 +74,32 @@ export default function Home() {
   const selectEvent = useAppStore((state) => state.selectEvent)
   const showNotifications = useAppStore((state) => state.showNotifications)
   const setShowNotifications = useAppStore((state) => state.setShowNotifications)
-  const [saved, setSaved] = useState<string[]>([])
+  const user = useAppStore((state) => state.user)
+  const placesQuery = usePlaces()
+  const eventsQuery = useEvents()
+  const savedPlacesQuery = useSavedPlaces()
+  const toggleSaved = useToggleSavedPlace()
+  const notificationsQuery = useNotifications()
+  const markAllRead = useMarkAllNotificationsRead()
+  const feedQuery = useFeed()
+  const latestPost = feedQuery.data?.items[0]
+  const commentsQuery = useComments(latestPost?.id)
+  const addCommentMutation = useAddComment(latestPost?.id ?? '')
   const [commentDraft, setCommentDraft] = useState('')
-  const [comments, setComments] = useState([
-    { id: 'c1', author: 'Aisha', text: 'Thank you for sharing this. So important.' },
-  ])
 
-  const initialNotifications = [
-    { id: 'n1', title: 'Route update', detail: 'Your safe route is 3 min away from your next stop.', time: '2m ago' },
-    { id: 'n2', title: 'New community post', detail: 'Lerato shared a new safety update in Cape Town.', time: '18m ago' },
-    { id: 'n3', title: 'Verified contact', detail: 'Your emergency contact has accepted your check-in.', time: '1h ago' },
-  ]
+  const places = placesQuery.data ?? []
+  const events = eventsQuery.data ?? []
+  const savedIds = new Set((savedPlacesQuery.data ?? []).map((place) => place.id))
+  const notifications = notificationsQuery.data?.items ?? []
+  const comments = commentsQuery.data?.items ?? []
+  const firstName = user?.name.split(' ')[0] ?? ''
+  const today = new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'short' }).toUpperCase()
 
-  const [notifications, setNotifications] = useState(initialNotifications)
-
-  const toggle = (id: string) =>
-    setSaved((items) =>
-      items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
-    )
+  // Opening the panel counts as reading everything in it.
+  useEffect(() => {
+    if (showNotifications && (notificationsQuery.data?.meta.unreadCount ?? 0) > 0 && !markAllRead.isPending) markAllRead.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showNotifications, notificationsQuery.data?.meta.unreadCount])
 
   const shareChannels = [
     { label: 'Email', icon: 'mail-outline' as const },
@@ -92,22 +110,18 @@ export default function Home() {
   ]
 
   const handleCommunityShare = async () => {
+    if (!latestPost) return
     await shareContent({
       title: 'Pink Plug community update',
-      message: 'Quick safety update: the area around Florida Road has had some increased incidents after midnight this week. Stay safe everyone.',
+      message: `${latestPost.author}: ${latestPost.content}`,
       url: 'https://thepinkplug.app/community',
     })
   }
 
   const addComment = () => {
     const trimmed = commentDraft.trim()
-    if (!trimmed) return
-
-    setComments((current) => [
-      ...current,
-      { id: `comment-${Date.now()}`, author: 'You', text: trimmed },
-    ])
-    setCommentDraft('')
+    if (!trimmed || !latestPost || addCommentMutation.isPending) return
+    addCommentMutation.mutate(trimmed, { onSuccess: () => setCommentDraft('') })
   }
 
   return (
@@ -139,6 +153,12 @@ export default function Home() {
                     <Text style={styles.closeText}>Close</Text>
                   </Pressable>
                 </View>
+                <LoadState
+                  loading={notificationsQuery.isPending}
+                  error={notificationsQuery.error}
+                  onRetry={() => notificationsQuery.refetch()}
+                  emptyText={notifications.length === 0 ? "You're all caught up." : undefined}
+                />
                 {notifications.map((item) => (
                   <View key={item.id} style={styles.notificationItem}>
                     <View style={styles.notificationDot} />
@@ -153,10 +173,10 @@ export default function Home() {
             </View>
           </Modal>
 
-          <Text style={[styles.eyebrow, isDark && styles.darkText]}>SANDTON • FRIDAY 11 SEPT</Text>
+          <Text style={[styles.eyebrow, isDark && styles.darkText]}>{(user?.city || 'Sandton').toUpperCase()} • {today}</Text>
           <Text style={[styles.title, isDark && styles.darkText]}>The Pink Plug</Text>
           <View style={styles.greetingRow}>
-            <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Welcome back, {MOCK_USER.name.split(' ')[0]}</Text>
+            <Text style={[styles.subtitle, isDark && styles.darkSecondaryText]}>Welcome back{firstName ? `, ${firstName}` : ''}</Text>
             <Image
               source={require('@/imports/Fingerprint New_Images/Fingerprint New_ImgID1.png')}
               style={styles.greetingAvatar}
@@ -219,16 +239,17 @@ export default function Home() {
         />
         <FlatList
           horizontal
-          data={MOCK_PLACES}
+          data={places}
           keyExtractor={(item) => item.id}
+          ListEmptyComponent={<LoadState loading={placesQuery.isPending} error={placesQuery.error} onRetry={() => placesQuery.refetch()} />}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontal}
           renderItem={({ item, index }) => (
             <AnimatedCard index={index} style={isIOS ? { width: Math.max(0, actionsViewportWidth - spacing.md * 2) } : undefined}>
               <NearbyCard
                 place={item}
-                saved={saved.includes(item.id)}
-                onToggleSave={() => toggle(item.id)}
+                saved={savedIds.has(item.id)}
+                onToggleSave={() => toggleSaved.mutate({ place: item, saved: !savedIds.has(item.id) })}
                 onPress={() => {
                   selectPlace(item)
                   router.push(placeRoute(item.id))
@@ -243,7 +264,8 @@ export default function Home() {
           onAction={() => router.push(routes.explore)}
         />
         <View style={styles.stack}>
-          {MOCK_EVENTS.slice(0, 3).map((event, index) => (
+          {events.length === 0 ? <LoadState loading={eventsQuery.isPending} error={eventsQuery.error} onRetry={() => eventsQuery.refetch()} /> : null}
+          {events.slice(0, 3).map((event, index) => (
             <AnimatedCard key={event.id} index={index} viewportHeight={viewportHeight} pressFeedback>
               <EventCard
                 event={event}
@@ -260,16 +282,21 @@ export default function Home() {
           action="Read all"
           onAction={() => router.push(routes.community)}
         />
+        {!latestPost ? (
+          <LoadState
+            loading={feedQuery.isPending}
+            error={feedQuery.error}
+            onRetry={() => feedQuery.refetch()}
+            emptyText="No community updates yet."
+          />
+        ) : (
         <AnimatedCard viewportHeight={viewportHeight} pressFeedback>
           <Card style={styles.communityCard}>
           <View style={styles.postAuthorRow}>
             <Ionicons name="location-outline" size={15} color={colors.primary} />
-            <Text style={[styles.postAuthor, isDark && styles.darkText]}>Lerato Khumalo • 8h ago</Text>
+            <Text style={[styles.postAuthor, isDark && styles.darkText]}>{latestPost.author} • {latestPost.timeAgo}</Text>
           </View>
-          <Text style={[styles.post, isDark && styles.darkSecondaryText]}>
-            Quick safety update: the area around Florida Road has had some
-            increased incidents after midnight this week. Stay safe everyone.
-          </Text>
+          <Text style={[styles.post, isDark && styles.darkSecondaryText]}>{latestPost.content}</Text>
 
           <View style={styles.shareRow}>
             {shareChannels.map((channel) => (
@@ -305,12 +332,13 @@ export default function Home() {
                 onPress={addComment}
                 style={[styles.commentButton, { backgroundColor: colors.primary }]}
               >
-                <Text style={styles.commentButtonText}>Post</Text>
+                <Text style={styles.commentButtonText}>{addCommentMutation.isPending ? '…' : 'Post'}</Text>
               </Pressable>
             </View>
           </View>
           </Card>
         </AnimatedCard>
+        )}
       </ScrollView>
     </SafeAreaView>
   )

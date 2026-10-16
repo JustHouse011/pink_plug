@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import { colors } from '@/constants/colors';
-import { MOCK_USER } from '@/data/mockUser';
+import { useNotifications } from '@/hooks/useApi';
 import * as authService from '@/services/authService';
 import Avatar from '@/components/ui/Avatar';
 import { useAppStore } from '@/store/useAppStore';
@@ -22,6 +22,8 @@ export default function AppHeader() {
   const router = useRouter();
   const logout = useAppStore((state) => state.logout);
   const shareLocation = useAppStore((state) => state.shareLocation);
+  const user = useAppStore((state) => state.user);
+  const unreadCount = useNotifications().data?.meta.unreadCount ?? 0;
   const menuVisible = useAppStore((state) => state.headerMenuVisible);
   const setHeaderMenuVisible = useAppStore((state) => state.setHeaderMenuVisible);
   const setShowNotifications = useAppStore((state) => state.setShowNotifications);
@@ -94,7 +96,7 @@ export default function AppHeader() {
             style={[styles.iconButton, isDark && styles.iconButtonDark]}
           >
             <Ionicons name="notifications-outline" size={20} color={colors.primary} />
-            <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>3</Text></View>
+            {unreadCount > 0 ? <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View> : null}
           </Pressable>
 
         </View>
@@ -106,7 +108,7 @@ export default function AppHeader() {
             onPress={() => setHeaderMenuVisible(!menuVisible)}
             style={styles.avatarButton}
           >
-            <Avatar value={MOCK_USER.name.charAt(0)} imageUri={MOCK_USER.profileImageUrl} size={40} />
+            <Avatar value={user?.avatar || user?.name.charAt(0)} imageUri={user?.profileImageUrl} size={40} />
           </Pressable>
           <View
             accessibilityLabel={shareLocation ? 'Online' : 'Offline'}

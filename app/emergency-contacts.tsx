@@ -14,18 +14,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, darkColors } from '@/constants/colors';
 import { pickContactFromPhoneBook, normalizePhoneNumber } from '@/services/contacts';
-import { useEmergencyContactsStore } from '@/store/useEmergencyContactsStore';
+import { useContactMutations, useTrustedContacts } from '@/hooks/useApi';
+import { errorMessage } from '@/services/api';
+import LoadState from '@/components/ui/LoadState';
+import type { TrustedContact } from '@/types';
 import { useTheme } from '@/context/ThemeProvider';
 import GlassCard from '@/components/ui/GlassCard';
 
 export default function EmergencyContacts() {
   const router = useRouter();
   const { isDark } = useTheme();
-  const contacts = useEmergencyContactsStore((state) => state.contacts);
-  const addContact = useEmergencyContactsStore((state) => state.addContact);
-  const removeContact = useEmergencyContactsStore((state) => state.removeContact);
-  const updateContact = useEmergencyContactsStore((state) => state.updateContact);
-  const limit = useEmergencyContactsStore((state) => state.limit);
+  const contactsQuery = useTrustedContacts();
+  const contacts = contactsQuery.data ?? [];
+  const { add, update, remove } = useContactMutations();
+  const limit = 5;
+  const showError = (error: unknown) => Alert.alert('Something went wrong', errorMessage(error));
+  const addContact = (contact: { name: string; phone: string; relationship: string; canReceiveSms: boolean; canReceiveCall: boolean; shareLiveLocation: boolean }, onSuccess?: () => void) =>
+    add.mutate(contact, { onSuccess, onError: showError });
+  const updateContact = (id: string, patch: Partial<Omit<TrustedContact, 'id' | 'isVerified'>>) =>
+    update.mutate({ id, patch }, { onError: showError });
+  const removeContact = (id: string) => remove.mutate(id, { onError: showError });
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [relationship, setRelationship] = useState('Friend');
@@ -54,7 +62,6 @@ export default function EmergencyContacts() {
       name: fullName,
       phone: normalizedPhone,
       relationship: result.relationship ?? 'Trusted contact',
-      isVerified: false,
       canReceiveSms: true,
       canReceiveCall: false,
       shareLiveLocation: false,
@@ -79,15 +86,14 @@ export default function EmergencyContacts() {
       name: trimmedName,
       phone: normalizedPhone,
       relationship: relationship.trim() || 'Friend',
-      isVerified: false,
       canReceiveSms: true,
       canReceiveCall: false,
       shareLiveLocation: false,
+    }, () => {
+      setName('');
+      setPhone('');
+      setRelationship('Friend');
     });
-
-    setName('');
-    setPhone('');
-    setRelationship('Friend');
   };
 
   return (
@@ -129,7 +135,7 @@ export default function EmergencyContacts() {
           />
 
           <Pressable style={styles.secondaryButton} onPress={handleManualAdd}>
-            <Text style={styles.secondaryButtonText}>Add Contact</Text>
+            <Text style={styles.secondaryButtonText}>{add.isPending ? 'Adding…' : 'Add Contact'}</Text>
           </Pressable>
         </View>
 
@@ -138,7 +144,9 @@ export default function EmergencyContacts() {
           <Text style={[styles.sectionMeta, isDark && styles.darkSecondaryText]}>{contacts.length}/{limit}</Text>
         </View>
 
-        {contacts.length === 0 ? (
+        {contacts.length === 0 && (contactsQuery.isPending || contactsQuery.error) ? (
+          <LoadState loading={contactsQuery.isPending} error={contactsQuery.error} onRetry={() => contactsQuery.refetch()} />
+        ) : contacts.length === 0 ? (
           <GlassCard level="standard" edge="subtle" style={styles.emptyCard}>
             <Text style={[styles.emptyText, isDark && styles.darkSecondaryText]}>No emergency contacts added yet.</Text>
           </GlassCard>

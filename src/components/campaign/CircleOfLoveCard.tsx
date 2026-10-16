@@ -17,10 +17,13 @@ import GlassCard from '@/components/ui/GlassCard';
 import { typography } from '@/constants/typography';
 import { useTheme } from '@/context/ThemeProvider';
 import { shareContent } from '@/services/sharing';
+import { useCampaignRsvp, useFeaturedCampaign } from '@/hooks/useApi';
+import { ApiError, errorMessage } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
 export type CircleOfLoveLayout = 'horizontal' | 'vertical' | 'hero';
 
-type ParticipationRole = 'Couple Joining Mass Wedding' | 'Guest / Supporter' | 'Media / Press';
+import type { ParticipationRole } from '@/types';
 
 type RsvpForm = {
   fullName: string;
@@ -30,7 +33,9 @@ type RsvpForm = {
   message: string;
 };
 
-const campaign = {
+/** Shown until the featured campaign loads (and if it can't be loaded). */
+const fallbackCampaign = {
+  id: 'circle-of-love',
   title: 'Circle of Love',
   host: 'Initiated by Thami Dish',
   date: '1 October 2026',
@@ -63,14 +68,21 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
   const [rolePickerVisible, setRolePickerVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [form, setForm] = useState<RsvpForm>({
-    fullName: '',
-    email: '',
-    phone: '',
+  const [form, setForm] = useState<RsvpForm>(() => ({
+    fullName: useAppStore.getState().user?.name ?? '',
+    email: useAppStore.getState().user?.email ?? '',
+    phone: useAppStore.getState().user?.phone ?? '',
     role: 'Guest / Supporter',
     message: '',
-  });
+  }));
   const [errors, setErrors] = useState<Partial<Record<keyof RsvpForm, string>>>({});
+
+  const featured = useFeaturedCampaign();
+  const rsvp = useCampaignRsvp();
+  const campaign = featured.data
+    ? { ...featured.data, image: featured.data.image ? { uri: featured.data.image } : fallbackCampaign.image }
+    : fallbackCampaign;
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isHero = layout === 'hero';
   const isIOSHero = Platform.OS === 'ios' && isHero;
@@ -96,11 +108,31 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
 
     setIsSubmitting(true);
     setSubmitted(false);
+    setSubmitError(null);
 
+    try {
+      await rsvp.mutateAsync({
+        id: campaign.id,
+        input: {
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          role: form.role,
+          message: form.message.trim() || undefined,
+        },
+      });
+    } catch (error) {
+      // A repeat RSVP (409) means they're already on the list.
+      if (!(error instanceof ApiError && error.code === 'CONFLICT')) {
+        setIsSubmitting(false);
+        setSubmitError(errorMessage(error));
+        return;
+      }
+    }
+
+    setIsSubmitting(false);
+    setSubmitted(true);
     setTimeout(() => {
-      setIsSubmitting(false);
-      setSubmitted(true);
-      setTimeout(() => {
         setSubmitted(false);
         setRsvpVisible(false);
         setForm({
@@ -111,8 +143,7 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
           message: '',
         });
         setErrors({});
-      }, 1200);
-    }, 800);
+    }, 1200);
   };
 
   const openShareLink = async (_channel: 'whatsapp' | 'x' | 'facebook' | 'linkedin') => {
@@ -290,6 +321,7 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
                 style={[styles.input, styles.textArea, isDark && styles.inputDark]}
               />
 
+              {submitError ? <Text style={styles.submitErrorText}>{submitError}</Text> : null}
               <Pressable
                 style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
                 onPress={handleSubmit}
@@ -379,6 +411,7 @@ export default function CircleOfLoveCard({ layout = 'horizontal' }: { layout?: C
 }
 
 const styles = StyleSheet.create({
+  submitErrorText: { color: colors.danger, fontSize: 13, marginBottom: 10 },
   card: {
     width: '100%',
     padding: 0,

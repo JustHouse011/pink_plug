@@ -110,7 +110,7 @@ export default function Login() {
     try {
       const { user, session } = await authService.verifyOtp(challengeId, otp.trim());
       login(user, session);
-      router.replace('/(tabs)/home');
+      router.replace(user.profileSetupComplete ? '/(tabs)/home' : '/profile-setup');
     } catch (error) {
       Alert.alert('Unable to verify code', describeError(error));
     } finally {

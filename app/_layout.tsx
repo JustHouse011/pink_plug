@@ -3,7 +3,8 @@ import '@/global.css';
 import { Suspense, useEffect, useState } from 'react';
 import { Platform, Pressable, Text, View, StyleSheet } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider, useTheme as useNavigationTheme } from 'expo-router/react-navigation';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,7 +20,6 @@ import AnimatedSplash from '@/components/splash/AnimatedSplash';
 import { useShellState } from '@/store/useAppStore';
 import { ThemeProvider, useTheme } from '@/context/ThemeProvider';
 
-const queryClient = new QueryClient();
 
 export default function RootLayout() {
   return (
