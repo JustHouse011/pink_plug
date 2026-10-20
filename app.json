@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "The Pink Plug",
-    "owner": "bongz011",
+    "owner": "amashabe",
     "slug": "the-pink-plug",
     "scheme": "pinkplug",
     "icon": "./src/imports/Fingerprint New_Icon.png",
@@ -41,7 +41,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "d65a7047-e0ce-4a6a-a0d0-ccac063ea7bd"
+        "projectId": "f57ab708-0aed-4b92-a46f-65aea8a31e9d"
       }
     },
     "android": {
@@ -54,7 +54,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/d65a7047-e0ce-4a6a-a0d0-ccac063ea7bd",
+      "url": "https://u.expo.dev/f57ab708-0aed-4b92-a46f-65aea8a31e9d",
       "enabled": true,
       "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0
