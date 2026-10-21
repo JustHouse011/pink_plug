@@ -273,8 +273,8 @@ Evidence: PROPOSED secure replacement for mock OTP.
 | Field | Type | Required | Nullable | Description |
 | --- | --- | --- | --- | --- |
 | challengeId | string | yes | no | Opaque purpose-bound challenge |
-| purpose | enum | yes | no | register, login, password_change, password_reset |
-| delivery | enum | yes | no | email or sms; email matches current register/login |
+| purpose | enum | yes | no | register, password_change, password_reset |
+| delivery | enum | yes | no | email or sms; email matches current register |
 | maskedDestination | string | yes | no | Do not disclose full destination |
 | expiresAt | timestamp | yes | no | Server policy; example duration is not a requirement |
 | resendAfter | timestamp | yes | no | Server-controlled next delivery time |
@@ -734,17 +734,17 @@ Error example:
 
 **Status:** PROPOSED; REQUIRED · current behavior MOCKED.
 
-- **Purpose:** Validate credentials before issuing an OTP challenge.
+- **Purpose:** Validate credentials and establish a session. No OTP: emailed codes are only for registration.
 - **Authentication:** Public.
 - **Path Parameters:** None.
 - **Query Parameters:** None.
 - **Request Headers:** Accept: application/json; Content-Type: application/json; Idempotency-Key: unique request key (required).
 - **Request Body / Validation:** email:string required; password:string required. Apply section 3 for this form; numeric maxima not evidenced there remain engineering decisions.
-- **HTTP Status:** 201.
-- **Success Response schema:** AuthChallenge in data; meta is an empty object unless stated.
+- **HTTP Status:** 200.
+- **Success Response schema:** AuthSession in data (same shape as E03); meta is an empty object unless stated.
 - **Error Responses:** 400 BAD_REQUEST; 422 VALIDATION_ERROR; 429 RATE_LIMITED; 500 INTERNAL_ERROR; 503 SERVICE_UNAVAILABLE. 409 IDEMPOTENCY_CONFLICT. 401 INVALID_CREDENTIALS; 403 VERIFICATION_REQUIRED for a controlled reactivation/setup workflow.
 - **Frontend Consumer:** app/login.tsx.
-- **Notes:** Return no tokens until OTP succeeds. Existing local fallback accepts arbitrary six-digit input; server must not replicate it.
+- **Notes:** Pending (unverified) accounts are rejected with 401 INVALID_CREDENTIALS; they must finish registration via E03.
 
 Request example:
 
@@ -755,22 +755,7 @@ Request example:
 }
 ```
 
-Success example:
-
-```json
-{
-  "success": true,
-  "data": {
-    "challengeId": "challenge_01",
-    "purpose": "login",
-    "delivery": "email",
-    "maskedDestination": "m***@example.com",
-    "expiresAt": "2026-09-22T10:10:00Z",
-    "resendAfter": "2026-09-22T10:01:00Z"
-  },
-  "meta": {}
-}
-```
+Success example: see E03.
 
 Error example:
 
@@ -793,7 +778,7 @@ Error example:
 
 **Status:** PROPOSED; REQUIRED · current behavior MOCKED.
 
-- **Purpose:** Consume a register/login challenge and establish a session.
+- **Purpose:** Consume a registration challenge, activate the account and establish a session.
 - **Authentication:** Public; challenge credential required.
 - **Path Parameters:** None.
 - **Query Parameters:** None.
@@ -802,7 +787,7 @@ Error example:
 - **HTTP Status:** 200.
 - **Success Response schema:** AuthSession in data; meta is an empty object unless stated.
 - **Error Responses:** 400 BAD_REQUEST; 422 VALIDATION_ERROR; 429 RATE_LIMITED; 500 INTERNAL_ERROR; 503 SERVICE_UNAVAILABLE. 409 IDEMPOTENCY_CONFLICT. 401 INVALID_OTP or OTP_EXPIRED.
-- **Frontend Consumer:** app/login.tsx; app/register.tsx.
+- **Frontend Consumer:** app/register.tsx.
 - **Notes:** Challenge is bound to identity, purpose, device attempt context, expiry, and attempt budget. Consumed once. Password-change/reset challenges cannot mint login tokens here.
 
 Request example:
@@ -876,7 +861,7 @@ Error example:
 **Status:** PROPOSED; REQUIRED · current behavior MOCKED.
 
 - **Purpose:** Resend code for an existing valid challenge.
-- **Authentication:** Public for register/login/password_reset challenges; password_change requires the original authenticated session as well as the opaque challenge. Determine purpose from the stored challenge.
+- **Authentication:** Public for register/password_reset challenges; password_change requires the original authenticated session as well as the opaque challenge. Determine purpose from the stored challenge.
 - **Path Parameters:** None.
 - **Query Parameters:** None.
 - **Request Headers:** Authorization: Bearer <access token> required for password_change only; Accept: application/json; Content-Type: application/json; Idempotency-Key: unique request key (required).
@@ -4478,7 +4463,7 @@ Error example:
 | --- | --- | --- | --- |
 | `app/index.tsx` | Persisted isAuthenticated and hydration redirect | auth/session, auth/refresh | MOCKED auth; production bootstrap required |
 | `app/onboarding.tsx` | Static slides; local completion/navigation | No API for presentation; owner setup state in users/me if needed | EXISTING local |
-| `app/login.tsx` | Prefilled mock email; mockOtpService; local login; simulated providers/biometric | auth/login, verify-otp, otp/resend; planned forgot/reset; provider decision | MOCKED |
+| `app/login.tsx` | Prefilled mock email; mockOtpService; local login; simulated providers/biometric | auth/login (no OTP); planned forgot/reset; provider decision | MOCKED |
 | `app/register.tsx` | Name/surname/email/phone form; local OTP; navigates setup | auth/register, verify-otp, otp/resend | MOCKED; password provisioning unresolved |
 | `app/profile-setup.tsx` | Local location/interests/photo/contacts; share flag | users/me PATCH; trusted-contacts create; media/upload; settings PATCH | MOCKED; no real GPS or durable completion |
 | `app/(tabs)/home.tsx` | MOCK_USER/PLACES/EVENTS, local saved IDs, notifications, comments, hard-coded safety story | users/me, places, events, saved-places, campaigns/featured, community/feed/comments, notifications | MOCKED; identify canonical safety-story post |

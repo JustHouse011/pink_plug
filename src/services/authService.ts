@@ -22,15 +22,13 @@ export function register(input: RegisterInput): Promise<AuthChallenge> {
   return apiCall<AuthChallenge>('/auth/register', { method: 'POST', body: input, auth: 'none', idempotent: true });
 }
 
-/** E02 — verify the password, then email a sign-in code. No tokens are issued until the code is verified. */
-export function login(email: string, password: string): Promise<AuthChallenge> {
-  return apiCall<AuthChallenge>('/auth/login', { method: 'POST', body: { email, password }, auth: 'none', idempotent: true });
+/** E02 — verify the password and sign in. No emailed code; that is only for registration. */
+export async function login(email: string, password: string): Promise<{ user: User; session: Session }> {
+  const result = await apiCall<VerifyOtpResult>('/auth/login', { method: 'POST', body: { email, password }, auth: 'none', idempotent: true });
+  return completeSignIn(result);
 }
 
-/**
- * E03 — consumes a register/login code, starts a session, and exchanges the
- * returned Firebase custom token for a real signed-in session via the client SDK.
- */
+/** E03 — consumes a registration code, activates the account, and signs in. */
 export async function verifyOtp(challengeId: string, otp: string): Promise<{ user: User; session: Session }> {
   const result = await apiCall<VerifyOtpResult>('/auth/verify-otp', {
     method: 'POST',
@@ -38,6 +36,11 @@ export async function verifyOtp(challengeId: string, otp: string): Promise<{ use
     auth: 'none',
     idempotent: true,
   });
+  return completeSignIn(result);
+}
+
+/** Exchanges the API's Firebase custom token for a real signed-in session via the client SDK. */
+async function completeSignIn(result: VerifyOtpResult): Promise<{ user: User; session: Session }> {
   await signInWithCustomToken(firebaseAuth, result.customToken);
   return { user: result.user, session: result.session };
 }

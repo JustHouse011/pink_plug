@@ -17,13 +17,12 @@ import { colors, darkColors } from '@/constants/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import { useAppStore } from '@/store/useAppStore';
 import * as authService from '@/services/authService';
+import { FirebaseError } from 'firebase/app';
 import { ApiError, ApiNetworkError } from '@/services/api';
 import { useTheme } from '@/context/ThemeProvider';
 import { routes } from '@/navigation/routes';
 
 const AUTH_METHODS = ['Gmail', 'Apple'];
-
-type AuthStep = 'email' | 'otp';
 
 type OptionalMethod = 'email' | 'gmail' | 'apple' | 'biometric';
 
@@ -32,14 +31,9 @@ export default function Login() {
   const router = useRouter();
   const login = useAppStore((state) => state.login);
   const setLoggingOut = useAppStore((state) => state.setLoggingOut);
-  const [step, setStep] = useState<AuthStep>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [challengeId, setChallengeId] = useState('');
-  const [maskedDestination, setMaskedDestination] = useState('');
   const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<OptionalMethod>('email');
   const palette = isDark
     ? {
@@ -70,6 +64,7 @@ export default function Login() {
   const describeError = (error: unknown): string => {
     if (error instanceof ApiError) return error.message;
     if (error instanceof ApiNetworkError) return error.message;
+    if (error instanceof FirebaseError) return `Sign-in failed (${error.code}). Please try again.`;
     return 'Something went wrong. Please try again.';
   };
 
@@ -87,44 +82,13 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const challenge = await authService.login(trimmed, password);
-      setChallengeId(challenge.challengeId);
-      setMaskedDestination(challenge.maskedDestination);
-      setSelectedMethod('email');
-      setOtp('');
-      setStep('otp');
+      const { user, session } = await authService.login(trimmed, password);
+      login(user, session);
+      router.replace(user.profileSetupComplete ? '/(tabs)/home' : '/profile-setup');
     } catch (error) {
       Alert.alert('Unable to sign in', describeError(error));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (!/^\d{6}$/.test(otp.trim())) {
-      Alert.alert('Invalid OTP', 'Please check the code and try again.');
-      return;
-    }
-
-    setVerifying(true);
-    try {
-      const { user, session } = await authService.verifyOtp(challengeId, otp.trim());
-      login(user, session);
-      router.replace(user.profileSetupComplete ? '/(tabs)/home' : '/profile-setup');
-    } catch (error) {
-      Alert.alert('Unable to verify code', describeError(error));
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleResendOtp = async () => {
-    try {
-      const challenge = await authService.resendOtp(challengeId);
-      setMaskedDestination(challenge.maskedDestination);
-      Alert.alert('Code resent', `We sent a new code to ${challenge.maskedDestination}.`);
-    } catch (error) {
-      Alert.alert('Unable to resend code', describeError(error));
     }
   };
 
@@ -134,12 +98,6 @@ export default function Login() {
   };
 
   const handleBack = () => {
-    if (step === 'otp') {
-      setStep('email');
-      setOtp('');
-      return;
-    }
-
     router.replace('/onboarding');
   };
 
@@ -165,8 +123,7 @@ export default function Login() {
           <Text accessibilityRole="header" style={[styles.title, { color: palette.text }]}>Hello!!</Text>
           <Text style={[styles.subtitle, { color: palette.secondaryText }]}>Sign in to continue to your Pink Plug account.</Text>
 
-          {step === 'email' ? (
-            <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
+          <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
               <Text style={[styles.label, { color: palette.text }]}>Email address</Text>
               <TextInput
                 value={email}
@@ -198,7 +155,7 @@ export default function Login() {
                   end={{ x: 1, y: 1 }}
                   style={styles.buttonGradient}
                 >
-                  <Text style={styles.primaryText}>{loading ? 'Sending...' : 'Continue'}</Text>
+                  <Text style={styles.primaryText}>{loading ? 'Signing in...' : 'Continue'}</Text>
                 </LinearGradient>
               </Pressable>
 
@@ -246,47 +203,8 @@ export default function Login() {
               </View>
 
             </GlassCard>
-          ) : (
-            <GlassCard style={[styles.card, { borderColor: palette.border }]}> 
-              <Text style={[styles.label, { color: palette.text }]}>OTP verification</Text>
-              <Text style={[styles.helperText, { color: palette.secondaryText }]}>
-                Enter the 6-digit code sent to {maskedDestination || email}
-              </Text>
-              <TextInput
-                value={otp}
-                onChangeText={setOtp}
-                keyboardType="number-pad"
-                maxLength={6}
-                placeholder="123456"
-                placeholderTextColor={palette.muted}
-                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.text }]}
-              />
 
-              <Pressable onPress={handleVerifyOtp} style={styles.primaryButton} disabled={verifying}>
-                <LinearGradient
-                  colors={[colors.primary, '#C432D9']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.buttonGradient}
-                >
-                  <Text style={styles.primaryText}>{verifying ? 'Verifying...' : 'Verify & continue'}</Text>
-                </LinearGradient>
-              </Pressable>
-
-              <View style={styles.secondaryRow}>
-                <Pressable onPress={handleResendOtp}>
-                  <Text style={styles.linkText}>Resend code</Text>
-                </Pressable>
-                <Pressable onPress={() => setStep('email')}>
-                  <Text style={styles.linkText}>Edit email</Text>
-                </Pressable>
-              </View>
-            </GlassCard>
-          )}
-
-          {step === 'email' && (
-            <Text style={styles.footNote}>Secure sign in using your trusted email account.</Text>
-          )}
+          <Text style={styles.footNote}>Secure sign in using your trusted email account.</Text>
         </ScrollView>
       </LinearGradient>
     </SafeAreaView>
@@ -379,17 +297,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 10,
   },
-  helperText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  demoOtp: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
   input: {
     backgroundColor: '#F9F5FF',
     borderWidth: 1,
@@ -435,11 +342,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textDecorationLine: 'underline',
-  },
-  secondaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
   },
   footNote: {
     color: colors.muted,

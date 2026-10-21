@@ -126,10 +126,10 @@ export interface User {
   profileSetupComplete: boolean;
 }
 
-/** M?? AuthChallenge — docs/API-SPECIFICATION.md. Returned by register/login/forgot-password/otp-resend. */
+/** M?? AuthChallenge — docs/API-SPECIFICATION.md. Returned by register/change-password-challenge/forgot-password/otp-resend. */
 export interface AuthChallenge {
   challengeId: string;
-  purpose: 'register' | 'login' | 'password_change' | 'password_reset';
+  purpose: 'register' | 'password_change' | 'password_reset';
   delivery: 'email';
   maskedDestination: string;
   expiresAt: string;
@@ -146,7 +146,7 @@ export interface Session {
   lastSeenAt: string;
 }
 
-/** POST /auth/verify-otp response. Exchange customToken with signInWithCustomToken client-side. */
+/** POST /auth/login and /auth/verify-otp response. Exchange customToken with signInWithCustomToken client-side. */
 export interface VerifyOtpResult {
   tokenType: 'firebase_custom_token';
   customToken: string;

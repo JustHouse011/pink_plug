@@ -16,6 +16,7 @@ import { colors, darkColors } from '@/constants/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import { useAppStore } from '@/store/useAppStore';
 import * as authService from '@/services/authService';
+import { FirebaseError } from 'firebase/app';
 import { ApiError, ApiNetworkError } from '@/services/api';
 import { useTheme } from '@/context/ThemeProvider';
 
@@ -60,6 +61,7 @@ export default function Register() {
   const describeError = (error: unknown): string => {
     if (error instanceof ApiError) return error.message;
     if (error instanceof ApiNetworkError) return error.message;
+    if (error instanceof FirebaseError) return `Sign-in failed (${error.code}). Please try again.`;
     return 'Something went wrong. Please try again.';
   };
 
