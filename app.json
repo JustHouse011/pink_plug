@@ -18,6 +18,12 @@
           "cameraPermission": "The Pink Plug needs camera access so you can take a selfie for your profile."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "The Pink Plug uses your location to set your city and suggest nearby communities, routes and places."
+        }
+      ],
       "expo-image",
       "expo-status-bar",
       [
@@ -32,7 +38,8 @@
     "ios": {
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "The Pink Plug needs access to your photos so you can upload a profile photo.",
-        "NSCameraUsageDescription": "The Pink Plug needs camera access so you can take a selfie for your profile."
+        "NSCameraUsageDescription": "The Pink Plug needs camera access so you can take a selfie for your profile.",
+        "NSLocationWhenInUseUsageDescription": "The Pink Plug uses your location to set your city and suggest nearby communities, routes and places."
       }
     },
     "experiments": {
@@ -47,7 +54,9 @@
     "android": {
       "package": "com.bongz011.thepinkplug",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "runtimeVersion": {

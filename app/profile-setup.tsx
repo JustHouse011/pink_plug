@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeProvider';
 import { colors, darkColors } from '@/constants/colors';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useAppStore } from '@/store/useAppStore';
 import { useContactMutations, useUpdateMe, useUpdateSettings } from '@/hooks/useApi';
 import * as usersService from '@/services/users';
@@ -35,6 +36,8 @@ export default function ProfileSetup() {
   const [currentStep, setCurrentStep] = useState(0);
   const [location, setLocation] = useState('Johannesburg, South Africa');
   const [locationMethod, setLocationMethod] = useState<'manual' | 'live'>('manual');
+  const [locating, setLocating] = useState(false);
+  const locationInputRef = useRef<TextInput>(null);
   const [interests, setInterests] = useState<string[]>(['Community', 'Events']);
   const [contacts, setContacts] = useState([{ name: '', phone: '' }]);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -77,8 +80,38 @@ export default function ProfileSetup() {
     );
   };
 
+  /** Reads the device position and fills the city field from it; the user can still edit the result. */
+  const fillFromLiveLocation = async () => {
+    setLocating(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Location permission needed', 'Allow location access to use your live location, or enter your city manually.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const [place] = await Location.reverseGeocodeAsync(position.coords);
+      const city = place?.city ?? place?.subregion ?? place?.district ?? place?.region;
+      if (!city) {
+        Alert.alert('Could not find your city', 'We got your position but could not match it to a city. Please enter it manually.');
+        return;
+      }
+      setLocation([city, place?.country].filter(Boolean).join(', '));
+      setLocationMethod('live');
+    } catch (error) {
+      Alert.alert('Could not get your location', `${errorMessage(error)} Please enter your city manually.`);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const enterLocationManually = () => {
+    setLocationMethod('manual');
+    locationInputRef.current?.focus();
+  };
+
   const canContinue = () => {
-    if (currentStep === 0) return location.trim().length > 0;
+    if (currentStep === 0) return location.trim().length > 0 && !locating;
     if (currentStep === 1) return interests.length > 0;
     if (currentStep === 2) return true;
     if (currentStep === 3) return contacts.some((contact) => contact.name.trim() || contact.phone.trim());
@@ -115,9 +148,9 @@ export default function ProfileSetup() {
   const finishSetup = async () => {
     setFinishing(true);
     try {
-      const city = locationMethod === 'manual' ? location.trim().replace(/,\s*South Africa$/i, '') : undefined;
+      const city = location.trim().replace(/,\s*South Africa$/i, '');
       await updateMe.mutateAsync({
-        ...(city ? { city } : {}),
+        city,
         interests,
         ...(profileImageId ? { profileImageId } : {}),
         profileSetupComplete: true,
@@ -199,30 +232,33 @@ export default function ProfileSetup() {
             <View style={[styles.card, isDark && styles.cardDark]}>
               <Text style={[styles.label, isDark && styles.darkText]}>Current location</Text>
               <TextInput
+                ref={locationInputRef}
                 placeholder="Johannesburg, South Africa"
                 placeholderTextColor={colors.muted}
                 value={location}
-                onChangeText={setLocation}
+                onChangeText={(value) => {
+                  setLocation(value);
+                  setLocationMethod('manual');
+                }}
+                editable={!locating}
                 autoCapitalize="words"
                 style={[styles.input, isDark && styles.inputDark]}
               />
 
               <View style={styles.inlineToggleRow}>
                 <Pressable
-                  onPress={() => setLocationMethod('manual')}
+                  onPress={enterLocationManually}
                   style={[styles.choicePill, locationMethod === 'manual' && styles.choicePillActive]}
                 >
                   <Text style={[styles.choicePillText, locationMethod === 'manual' && styles.choicePillTextActive]}>Enter manually</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => {
-                    setLocationMethod('live');
-                    setLocationSharing(true);
-                    setLocation('Using live location');
-                  }}
+                  onPress={fillFromLiveLocation}
+                  disabled={locating}
                   style={[styles.choicePill, locationMethod === 'live' && styles.choicePillActive]}
                 >
-                  <Text style={[styles.choicePillText, locationMethod === 'live' && styles.choicePillTextActive]}>Use live location</Text>
+                  {locating ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+                  <Text style={[styles.choicePillText, locationMethod === 'live' && styles.choicePillTextActive]}>{locating ? 'Locating…' : 'Use live location'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -257,24 +293,14 @@ export default function ProfileSetup() {
                 </View>
                 <Switch
                   value={shareLocation}
-                  onValueChange={(value) => {
-                    setLocationSharing(value);
-                    if (value) {
-                      setLocationMethod('live');
-                      setLocation('Live location active');
-                    }
-                  }}
+                  onValueChange={setLocationSharing}
                   trackColor={{ false: '#D9D2F4', true: '#A855F7' }}
                   thumbColor="#fff"
                 />
               </View>
 
               <Pressable
-                onPress={() => {
-                  setLocationSharing(true);
-                  setLocationMethod('live');
-                  setLocation('Live location active');
-                }}
+                onPress={() => setLocationSharing(true)}
                 style={styles.secondaryButton}
               >
                 <Ionicons name="location-outline" size={18} color={colors.primary} />
@@ -472,6 +498,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   choicePillActive: {
     backgroundColor: colors.primary,
